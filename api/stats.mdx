@@ -1,0 +1,73 @@
+---
+title: "Stats API — Bakery and Platform Analytics"
+description: "Bakers access their own revenue, order counts, and top products. Admins see platform-wide totals, active bakery counts, and top bakeries by revenue."
+---
+
+The Stats API provides analytics dashboards for bakers and admins. Baker stats cover their own bakery; admin stats aggregate the entire platform. All monetary values and counts exclude cancelled orders.
+
+## GET /api/v1/stats/bakery
+
+Returns statistics for the authenticated baker's bakery. All calculations use the America/Bogota timezone.
+
+**Auth required:** Yes — **BAKER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/stats/bakery
+```
+
+**Response fields:**
+
+<ResponseField name="bakeryId" type="string">The bakery ID.</ResponseField>
+<ResponseField name="totalOrders" type="integer">Lifetime non-cancelled orders.</ResponseField>
+<ResponseField name="totalRevenue" type="number">Lifetime revenue.</ResponseField>
+<ResponseField name="averageOrderValue" type="number">Average order value.</ResponseField>
+<ResponseField name="ordersToday" type="integer">Orders placed today.</ResponseField>
+<ResponseField name="revenueToday" type="number">Revenue earned today.</ResponseField>
+<ResponseField name="ordersThisWeek" type="integer">Orders this week.</ResponseField>
+<ResponseField name="revenueThisWeek" type="number">Revenue this week.</ResponseField>
+<ResponseField name="topProducts" type="ProductStat[]">
+  Top 5 products by units sold.
+  <Expandable title="ProductStat fields">
+    <ResponseField name="productId" type="string">Product ID.</ResponseField>
+    <ResponseField name="productName" type="string">Product name.</ResponseField>
+    <ResponseField name="emoji" type="string">Product emoji.</ResponseField>
+    <ResponseField name="totalSold" type="integer">Units sold.</ResponseField>
+    <ResponseField name="totalRevenue" type="number">Revenue from this product.</ResponseField>
+  </Expandable>
+</ResponseField>
+<ResponseField name="ordersByHour" type="object">Map of hour (0–23) to order count.</ResponseField>
+<ResponseField name="ordersByStatus" type="object">Map of OrderStatus to count.</ResponseField>
+
+---
+
+## GET /api/v1/stats/admin
+
+Returns platform-wide statistics.
+
+**Auth required:** Yes — **ADMIN**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/stats/admin
+```
+
+**Response fields:**
+
+<ResponseField name="totalBakeries" type="integer">Total bakeries on the platform.</ResponseField>
+<ResponseField name="activeBakeries" type="integer">Bakeries with ACTIVE status.</ResponseField>
+<ResponseField name="totalUsers" type="integer">Total registered users.</ResponseField>
+<ResponseField name="totalOrders" type="integer">Lifetime non-cancelled orders.</ResponseField>
+<ResponseField name="totalRevenue" type="number">Lifetime platform revenue.</ResponseField>
+<ResponseField name="ordersToday" type="integer">Orders placed today.</ResponseField>
+<ResponseField name="revenueToday" type="number">Revenue today.</ResponseField>
+<ResponseField name="topBakeries" type="BakeryStat[]">
+  Top 10 bakeries by revenue.
+  <Expandable title="BakeryStat fields">
+    <ResponseField name="bakeryId" type="string">Bakery ID.</ResponseField>
+    <ResponseField name="bakeryName" type="string">Bakery name.</ResponseField>
+    <ResponseField name="totalOrders" type="integer">Non-cancelled orders.</ResponseField>
+    <ResponseField name="totalRevenue" type="number">Total revenue.</ResponseField>
+    <ResponseField name="rating" type="number">Average rating.</ResponseField>
+  </Expandable>
+</ResponseField>

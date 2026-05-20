@@ -1,0 +1,643 @@
+---
+title: 'Data Models in the Panahashi API'
+description: 'Reference for all Panahashi data models: Bakery, Product, Order, UserProfile, Payment, Review, LoyaltyCard, Promotion, and the ApiResponse/PagedResponse wrappers.'
+keywords: ['data models', 'Bakery', 'Product', 'Order', 'UserProfile', 'Payment', 'Review', 'LoyaltyCard', 'Promotion', 'Kotlin', 'Firestore']
+---
+
+Every object returned by the Panahashi API maps directly to a Kotlin data class defined in `Models.kt` and stored as a Firestore document. All timestamps are Unix epoch milliseconds (`Long`). All monetary amounts are `Double` values in Colombian pesos (COP). The sections below document each model's fields, the enum values they reference, and example JSON for the most commonly used types.
+
+## Enums
+
+<AccordionGroup>
+  <Accordion title="UserRole">
+    Determines what API endpoints a user can access.
+
+    | Value | Description |
+    |---|---|
+    | `CUSTOMER` | Default role. Can place orders, manage cart, and write reviews. |
+    | `BAKER` | Manages a single bakery's products and orders. |
+    | `ADMIN` | Full platform access including role management and refunds. |
+  </Accordion>
+
+  <Accordion title="BakeryStatus">
+    Controls whether a bakery is visible and operational.
+
+    | Value | Description |
+    |---|---|
+    | `ACTIVE` | Bakery is live and visible to customers. |
+    | `INACTIVE` | Bakery is not yet published or has been deactivated. |
+    | `SUSPENDED` | Bakery has been suspended by an admin. |
+  </Accordion>
+
+  <Accordion title="ProductAvailabilityStatus">
+    Indicates when a product can be picked up.
+
+    | Value | Description |
+    |---|---|
+    | `READY_NOW` | Available immediately. |
+    | `READY_IN_20` | Ready in approximately 20 minutes. |
+    | `READY_IN_60` | Ready in approximately 60 minutes. |
+    | `ADVANCE_ORDER_ONLY` | Must be ordered in advance. See `advanceMinutes`. |
+    | `OUT_OF_STOCK` | Not currently available. |
+  </Accordion>
+
+  <Accordion title="OrderStatus">
+    Tracks an order through its lifecycle.
+
+    | Value | Description |
+    |---|---|
+    | `PENDING` | Order placed but not yet confirmed by the bakery. |
+    | `CONFIRMED` | Bakery has accepted the order. |
+    | `BAKING` | Order is being prepared. |
+    | `READY` | Order is ready for pickup. |
+    | `COMPLETED` | Customer has picked up the order. |
+    | `CANCELLED` | Order was cancelled. |
+  </Accordion>
+
+  <Accordion title="PaymentStatus">
+    Tracks payment state for an order.
+
+    | Value | Description |
+    |---|---|
+    | `PENDING` | Payment has not yet been processed. |
+    | `APPROVED` | Payment was successful. |
+    | `REJECTED` | Payment was declined. |
+    | `REFUNDED` | Payment has been refunded by an admin. |
+  </Accordion>
+
+  <Accordion title="PaymentMethod">
+    The method used to pay for an order.
+
+    | Value | Description |
+    |---|---|
+    | `CREDIT_CARD` | Simulated credit card payment. |
+    | `DEBIT_CARD` | Simulated debit card payment. |
+    | `PSE` | Colombian online bank transfer (PSE). |
+    | `CASH_ON_PICKUP` | Customer pays with cash at pickup. |
+  </Accordion>
+
+  <Accordion title="PromotionType">
+    Determines how a discount is calculated.
+
+    | Value | Description |
+    |---|---|
+    | `PERCENTAGE` | Discount as a percentage of the order total. Uses `discountPct`. |
+    | `FIXED_AMOUNT` | Flat amount deducted from the total. Uses `discountAmount`. |
+    | `HAPPY_HOUR` | Discount active only between `happyHourStart` and `happyHourEnd`. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Bakery
+
+Represents a bakery on the platform.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID. Auto-generated on creation.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name of the bakery.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Short description shown on the bakery's profile page.
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  Street address for pickup.
+</ResponseField>
+
+<ResponseField name="lat" type="number">
+  Latitude coordinate used for the nearby bakeries query.
+</ResponseField>
+
+<ResponseField name="lng" type="number">
+  Longitude coordinate used for the nearby bakeries query.
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Contact phone number.
+</ResponseField>
+
+<ResponseField name="logoUrl" type="string">
+  URL of the bakery's logo image.
+</ResponseField>
+
+<ResponseField name="bannerUrl" type="string">
+  URL of the bakery's banner image.
+</ResponseField>
+
+<ResponseField name="isOpen" type="boolean">
+  Whether the bakery is currently accepting orders.
+</ResponseField>
+
+<ResponseField name="openTime" type="string">
+  Opening time in `HH:mm` format. Default `"07:00"`.
+</ResponseField>
+
+<ResponseField name="closeTime" type="string">
+  Closing time in `HH:mm` format. Default `"20:00"`.
+</ResponseField>
+
+<ResponseField name="rating" type="number">
+  Average review rating, recalculated on each new review submission.
+</ResponseField>
+
+<ResponseField name="totalReviews" type="number">
+  Total number of reviews submitted for this bakery.
+</ResponseField>
+
+<ResponseField name="status" type="BakeryStatus">
+  One of `ACTIVE`, `INACTIVE`, or `SUSPENDED`. Default `INACTIVE`.
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  Firebase UID of the `BAKER` user who owns this bakery.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the bakery was created.
+</ResponseField>
+
+---
+
+## Product
+
+Represents a baked good offered by a bakery.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string" required>
+  ID of the bakery that owns this product.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name of the product.
+</ResponseField>
+
+<ResponseField name="price" type="number" required>
+  Price in COP.
+</ResponseField>
+
+<ResponseField name="emoji" type="string">
+  Single emoji character used as a quick visual indicator.
+</ResponseField>
+
+<ResponseField name="availabilityStatus" type="ProductAvailabilityStatus">
+  One of `READY_NOW`, `READY_IN_20`, `READY_IN_60`, `ADVANCE_ORDER_ONLY`, or `OUT_OF_STOCK`. Default `READY_NOW`.
+</ResponseField>
+
+<ResponseField name="stock" type="number">
+  Current units in stock.
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Free-text category label (e.g. `"Pan"`, `"Postres"`).
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Longer description of the product.
+</ResponseField>
+
+<ResponseField name="imageUrl" type="string">
+  URL of the product image, set via `POST /api/v1/upload/product/{productId}`.
+</ResponseField>
+
+<ResponseField name="available" type="boolean">
+  Whether the product is currently listed. Default `true`.
+</ResponseField>
+
+<ResponseField name="advanceMinutes" type="number">
+  Minutes in advance required to order. Only relevant when `availabilityStatus` is `ADVANCE_ORDER_ONLY`.
+</ResponseField>
+
+```json Example Product
+{
+  "id": "prod-001",
+  "bakeryId": "bakery-xyz789",
+  "name": "Croissant de mantequilla",
+  "price": 4500,
+  "emoji": "🥐",
+  "availabilityStatus": "READY_NOW",
+  "stock": 12,
+  "category": "Panadería",
+  "description": "Croissant hojaldrado con mantequilla francesa.",
+  "imageUrl": "https://storage.example.com/products/prod-001.jpg",
+  "available": true,
+  "advanceMinutes": 0
+}
+```
+
+---
+
+## Order
+
+Tracks a customer order from placement through pickup.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Firebase UID of the customer who placed the order.
+</ResponseField>
+
+<ResponseField name="userName" type="string">
+  Display name of the customer at the time of order.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string" required>
+  ID of the bakery fulfilling the order.
+</ResponseField>
+
+<ResponseField name="bakeryName" type="string">
+  Display name of the bakery at the time of order.
+</ResponseField>
+
+<ResponseField name="items" type="CartItem[]">
+  Snapshot of the items in the order. See [CartItem](#cartitem) below.
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Final order total in COP, after any discount.
+</ResponseField>
+
+<ResponseField name="status" type="OrderStatus">
+  Lifecycle status. One of `PENDING`, `CONFIRMED`, `BAKING`, `READY`, `COMPLETED`, `CANCELLED`.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the order was placed.
+</ResponseField>
+
+<ResponseField name="pickupTime" type="string">
+  Human-readable pickup time string (e.g. `"15:30"`).
+</ResponseField>
+
+<ResponseField name="scheduledFor" type="number | null">
+  Unix epoch milliseconds for scheduled advance orders. `null` for immediate orders.
+</ResponseField>
+
+<ResponseField name="qrCode" type="string">
+  QR code payload used by bakers to verify pickup via `POST /api/v1/orders/verify-qr`.
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Customer notes for the bakery (e.g. `"Sin azúcar"`).
+</ResponseField>
+
+<ResponseField name="estimatedReadyAt" type="number | null">
+  Unix epoch milliseconds when the order is expected to be ready. Set by the baker.
+</ResponseField>
+
+<ResponseField name="discountAmount" type="number">
+  Amount deducted by a promotion, in COP. `0` if no promotion applied.
+</ResponseField>
+
+<ResponseField name="promotionId" type="string | null">
+  ID of the applied promotion, or `null` if none.
+</ResponseField>
+
+<ResponseField name="paymentStatus" type="PaymentStatus">
+  One of `PENDING`, `APPROVED`, `REJECTED`, `REFUNDED`.
+</ResponseField>
+
+<ResponseField name="paymentMethod" type="PaymentMethod">
+  One of `CREDIT_CARD`, `DEBIT_CARD`, `PSE`, `CASH_ON_PICKUP`.
+</ResponseField>
+
+```json Example Order
+{
+  "id": "order-abc123",
+  "userId": "firebase-uid-abc123",
+  "userName": "María López",
+  "bakeryId": "bakery-xyz789",
+  "bakeryName": "La Panadería Feliz",
+  "items": [
+    { "productId": "prod-001", "name": "Croissant de mantequilla", "price": 4500, "emoji": "🥐", "qty": 2 }
+  ],
+  "total": 9000,
+  "status": "CONFIRMED",
+  "createdAt": 1716000000000,
+  "pickupTime": "15:30",
+  "scheduledFor": null,
+  "qrCode": "QR-order-abc123",
+  "notes": "",
+  "estimatedReadyAt": 1716001800000,
+  "discountAmount": 0,
+  "promotionId": null,
+  "paymentStatus": "APPROVED",
+  "paymentMethod": "CREDIT_CARD"
+}
+```
+
+---
+
+## CartItem
+
+A snapshot of a product at the time it is added to an order. Embedded inside `Order.items`.
+
+<ResponseField name="productId" type="string">
+  ID of the source product.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Product name at the time the item was added.
+</ResponseField>
+
+<ResponseField name="price" type="number">
+  Unit price in COP at the time the item was added.
+</ResponseField>
+
+<ResponseField name="emoji" type="string">
+  Product emoji at the time the item was added.
+</ResponseField>
+
+<ResponseField name="qty" type="number">
+  Quantity ordered.
+</ResponseField>
+
+---
+
+## UserProfile
+
+Stores metadata for an authenticated user in the `users` Firestore collection.
+
+<ResponseField name="uid" type="string" required>
+  Firebase UID. Used as the Firestore document ID.
+</ResponseField>
+
+<ResponseField name="displayName" type="string">
+  User's display name from Firebase Auth.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address.
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Contact phone number.
+</ResponseField>
+
+<ResponseField name="role" type="UserRole">
+  One of `CUSTOMER`, `BAKER`, or `ADMIN`. Default `CUSTOMER`.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string">
+  ID of the bakery linked to this user. Non-empty only for `BAKER` users.
+</ResponseField>
+
+<ResponseField name="fcmToken" type="string">
+  Firebase Cloud Messaging token for push notifications.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the profile was created.
+</ResponseField>
+
+---
+
+## Payment
+
+Records a payment transaction for an order.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="orderId" type="string" required>
+  ID of the order this payment belongs to.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Firebase UID of the paying customer.
+</ResponseField>
+
+<ResponseField name="amount" type="number">
+  Amount charged in COP.
+</ResponseField>
+
+<ResponseField name="method" type="PaymentMethod">
+  One of `CREDIT_CARD`, `DEBIT_CARD`, `PSE`, `CASH_ON_PICKUP`.
+</ResponseField>
+
+<ResponseField name="status" type="PaymentStatus">
+  One of `PENDING`, `APPROVED`, `REJECTED`, `REFUNDED`.
+</ResponseField>
+
+<ResponseField name="simulatedCardLast4" type="string">
+  Last four digits of the simulated card, used for display in the client. Empty for non-card methods.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the payment record was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="number">
+  Unix epoch milliseconds when the payment record was last updated (e.g. after a refund).
+</ResponseField>
+
+---
+
+## Review
+
+A customer review submitted after a completed order.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string" required>
+  ID of the bakery being reviewed.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Firebase UID of the reviewer.
+</ResponseField>
+
+<ResponseField name="userName" type="string">
+  Display name of the reviewer at the time of submission.
+</ResponseField>
+
+<ResponseField name="orderId" type="string">
+  ID of the completed order associated with this review.
+</ResponseField>
+
+<ResponseField name="rating" type="number">
+  Integer rating from 1 to 5.
+</ResponseField>
+
+<ResponseField name="comment" type="string">
+  Free-text review body.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the review was submitted.
+</ResponseField>
+
+---
+
+## LoyaltyCard
+
+Tracks a customer's stamp-card progress at a specific bakery.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Firebase UID of the card holder.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string" required>
+  ID of the bakery this card belongs to.
+</ResponseField>
+
+<ResponseField name="stamps" type="number">
+  Current stamp count toward the next reward.
+</ResponseField>
+
+<ResponseField name="stampsForReward" type="number">
+  Number of stamps required to earn one free item. Default `9`.
+</ResponseField>
+
+<ResponseField name="totalRewardsEarned" type="number">
+  Cumulative number of rewards earned across all time.
+</ResponseField>
+
+<ResponseField name="freeItemsAvailable" type="number">
+  Number of unredeemed free items the customer can claim.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="number">
+  Unix epoch milliseconds when the card was last updated.
+</ResponseField>
+
+---
+
+## Promotion
+
+A discount applied to an order at checkout.
+
+<ResponseField name="id" type="string" required>
+  Firestore document ID.
+</ResponseField>
+
+<ResponseField name="bakeryId" type="string" required>
+  ID of the bakery that created this promotion.
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  ID of the specific product this promotion applies to. Empty string if bakery-wide.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Short display name shown in the client.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Longer explanation of the promotion terms.
+</ResponseField>
+
+<ResponseField name="type" type="PromotionType">
+  One of `PERCENTAGE`, `FIXED_AMOUNT`, or `HAPPY_HOUR`.
+</ResponseField>
+
+<ResponseField name="discountPct" type="number">
+  Percentage discount (0–100). Used when `type` is `PERCENTAGE`.
+</ResponseField>
+
+<ResponseField name="discountAmount" type="number">
+  Fixed discount in COP. Used when `type` is `FIXED_AMOUNT`.
+</ResponseField>
+
+<ResponseField name="happyHourStart" type="string">
+  Happy hour start time in `HH:mm` format. Used when `type` is `HAPPY_HOUR`.
+</ResponseField>
+
+<ResponseField name="happyHourEnd" type="string">
+  Happy hour end time in `HH:mm` format. Used when `type` is `HAPPY_HOUR`.
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the promotion is currently live. Default `true`.
+</ResponseField>
+
+<ResponseField name="createdAt" type="number">
+  Unix epoch milliseconds when the promotion was created.
+</ResponseField>
+
+---
+
+## Response wrappers
+
+All Panahashi endpoints return data wrapped in one of two envelope types.
+
+### ApiResponse\<T\>
+
+Used for single-object and action responses.
+
+<ResponseField name="success" type="boolean" required>
+  `true` if the request succeeded, `false` on error.
+</ResponseField>
+
+<ResponseField name="data" type="T | null">
+  The response payload. `null` on error responses.
+</ResponseField>
+
+<ResponseField name="message" type="string | null">
+  Human-readable message. Present on errors and some success responses.
+</ResponseField>
+
+```json Example ApiResponse
+{
+  "success": true,
+  "data": {
+    "id": "order-abc123",
+    "status": "CONFIRMED"
+  },
+  "message": null
+}
+```
+
+### PagedResponse\<T\>
+
+Used for list endpoints that support pagination.
+
+<ResponseField name="data" type="T[]" required>
+  The current page of results.
+</ResponseField>
+
+<ResponseField name="page" type="number" required>
+  Current page index (1-based).
+</ResponseField>
+
+<ResponseField name="pageSize" type="number" required>
+  Number of items per page.
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Total number of items across all pages.
+</ResponseField>
+
+<ResponseField name="hasMore" type="boolean" required>
+  `true` if there are additional pages beyond the current one.
+</ResponseField>
+
+```json Example PagedResponse
+{
+  "data": [ { "id": "prod-001", "name": "Croissant de mantequilla" } ],
+  "page": 1,
+  "pageSize": 20,
+  "total": 47,
+  "hasMore": true
+}
+```
+
+<Tip>
+  To fetch the next page, increment the `page` query parameter by 1 and repeat the request with the same `pageSize`.
+</Tip>

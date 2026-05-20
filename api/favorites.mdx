@@ -1,0 +1,70 @@
+---
+title: "Favorites API — Saved Bakeries"
+description: "Customers can save and unsave bakeries as favorites. Toggle endpoint adds or removes in a single call. Returns full Bakery objects for the saved list."
+---
+
+The Favorites API lets customers save their preferred bakeries for quick access. The toggle endpoint adds the bakery if not already saved, or removes it if it is — a single call handles both actions.
+
+## GET /api/v1/favorites
+
+Returns the authenticated customer's favorited bakeries as full `Bakery` objects.
+
+**Auth required:** Yes — **CUSTOMER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/favorites
+```
+
+---
+
+## POST /api/v1/favorites/{bakeryId}
+
+Toggles a bakery as a favorite. Adds it if not saved; removes it if already saved.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="bakeryId" type="string" required>ID of the bakery to toggle.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/favorites/bak001
+```
+
+**Response:**
+```json
+{ "success": true, "data": { "isFavorite": true }, "message": "Panadería agregada a favoritos" }
+```
+`isFavorite: true` means the bakery is now saved; `isFavorite: false` means it was removed.
+
+---
+
+## GET /api/v1/favorites/{bakeryId}/status
+
+Checks if a specific bakery is in the customer's favorites.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="bakeryId" type="string" required>Bakery ID to check.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/favorites/bak001/status
+```
+
+---
+
+## DELETE /api/v1/favorites/{bakeryId}
+
+Explicitly removes a bakery from favorites.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="bakeryId" type="string" required>Bakery ID to remove.</ParamField>
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/favorites/bak001
+```

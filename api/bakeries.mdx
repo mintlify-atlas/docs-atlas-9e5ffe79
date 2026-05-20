@@ -1,0 +1,191 @@
+---
+title: "Bakeries API — Manage Bakery Listings"
+description: "REST endpoints for listing, creating, and managing bakeries. Includes nearby search by GPS coordinates and baker open/close toggle with schedule validation."
+---
+
+The Bakeries API lets customers browse active bakeries, bakers manage their own storefront, and admins administer the full catalog. All write operations require authentication; read endpoints for the public catalog are open.
+
+## Bakery object
+
+<ResponseField name="id" type="string">Unique Firestore document ID.</ResponseField>
+<ResponseField name="name" type="string">Display name of the bakery.</ResponseField>
+<ResponseField name="description" type="string">Short description.</ResponseField>
+<ResponseField name="address" type="string">Street address.</ResponseField>
+<ResponseField name="lat" type="number">Latitude coordinate.</ResponseField>
+<ResponseField name="lng" type="number">Longitude coordinate.</ResponseField>
+<ResponseField name="phone" type="string">Contact phone number.</ResponseField>
+<ResponseField name="logoUrl" type="string">Firebase Storage URL for the logo image.</ResponseField>
+<ResponseField name="bannerUrl" type="string">Firebase Storage URL for the banner image.</ResponseField>
+<ResponseField name="isOpen" type="boolean">Whether the bakery is currently accepting orders.</ResponseField>
+<ResponseField name="openTime" type="string">Opening time in HH:mm format, e.g. "07:00".</ResponseField>
+<ResponseField name="closeTime" type="string">Closing time in HH:mm format, e.g. "20:00".</ResponseField>
+<ResponseField name="rating" type="number">Average review rating (0–5), recalculated on each new review.</ResponseField>
+<ResponseField name="totalReviews" type="integer">Total number of reviews.</ResponseField>
+<ResponseField name="status" type="string">One of `ACTIVE`, `INACTIVE`, `SUSPENDED`.</ResponseField>
+<ResponseField name="ownerId" type="string">Firebase UID of the baker who owns this bakery.</ResponseField>
+<ResponseField name="createdAt" type="integer">Creation timestamp in epoch milliseconds.</ResponseField>
+
+---
+
+## GET /api/v1/bakeries
+
+Returns all bakeries with `status = ACTIVE`.
+
+**Auth required:** No
+
+```bash
+curl http://localhost:8080/api/v1/bakeries
+```
+
+**Response:** `ApiResponse<List<Bakery>>`
+
+---
+
+## GET /api/v1/bakeries/nearby
+
+Returns active bakeries within a given radius, sorted by distance.
+
+**Auth required:** No
+
+<ParamField query="lat" type="number" required>User's latitude.</ParamField>
+<ParamField query="lng" type="number" required>User's longitude.</ParamField>
+<ParamField query="radius" type="number">Search radius in kilometers. Default: `5`.</ParamField>
+
+```bash
+curl "http://localhost:8080/api/v1/bakeries/nearby?lat=4.6097&lng=-74.0817&radius=3"
+```
+
+**Response:** `ApiResponse<List<{ bakery: Bakery, distanceKm: Double }>>`
+
+---
+
+## GET /api/v1/bakeries/all
+
+Returns all bakeries including `INACTIVE` and `SUSPENDED` ones.
+
+**Auth required:** Yes — **ADMIN**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/bakeries/all
+```
+
+---
+
+## GET /api/v1/bakeries/{id}
+
+Returns a single bakery by ID.
+
+**Auth required:** Yes (any role)
+
+<ParamField path="id" type="string" required>Bakery Firestore document ID.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/bakeries/abc123
+```
+
+---
+
+## GET /api/v1/bakeries/me
+
+Returns the authenticated baker's own bakery.
+
+**Auth required:** Yes — **BAKER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/bakeries/me
+```
+
+---
+
+## PATCH /api/v1/bakeries/me
+
+Updates the authenticated baker's bakery. All fields optional; only provided fields are changed. Bakers cannot change their own `status`.
+
+**Auth required:** Yes — **BAKER**
+
+```json
+{
+  "name": "La Panadería Nueva",
+  "description": "Pan artesanal fresco",
+  "phone": "+57 300 000 0000",
+  "openTime": "06:00",
+  "closeTime": "21:00"
+}
+```
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"La Panadería Nueva"}' \
+  http://localhost:8080/api/v1/bakeries/me
+```
+
+---
+
+## PATCH /api/v1/bakeries/me/open
+
+Toggles the bakery open or closed. Validates that the current time (America/Bogota) falls within the bakery's `openTime`–`closeTime` window before allowing `isOpen: true`.
+
+**Auth required:** Yes — **BAKER**
+
+```json
+{ "isOpen": true }
+```
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"isOpen":true}' \
+  http://localhost:8080/api/v1/bakeries/me/open
+```
+
+<Warning>Opening outside scheduled hours returns a 400 error.</Warning>
+
+---
+
+## POST /api/v1/bakeries
+
+Creates a new bakery. The `ownerId` must be a user with the BAKER role.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField body="name" type="string" required>Bakery name.</ParamField>
+<ParamField body="description" type="string" required>Short description.</ParamField>
+<ParamField body="address" type="string" required>Street address.</ParamField>
+<ParamField body="lat" type="number" required>Latitude.</ParamField>
+<ParamField body="lng" type="number" required>Longitude.</ParamField>
+<ParamField body="phone" type="string" required>Contact phone.</ParamField>
+<ParamField body="openTime" type="string" required>Opening time, HH:mm.</ParamField>
+<ParamField body="closeTime" type="string" required>Closing time, HH:mm.</ParamField>
+<ParamField body="ownerId" type="string" required>Firebase UID of the BAKER owner.</ParamField>
+
+---
+
+## PATCH /api/v1/bakeries/{id}
+
+Admin can update any field including `status`.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField path="id" type="string" required>Bakery ID.</ParamField>
+
+---
+
+## DELETE /api/v1/bakeries/{id}
+
+Deletes a bakery and clears the `bakeryId` from the owner's user profile.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField path="id" type="string" required>Bakery ID.</ParamField>
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/bakeries/abc123
+```

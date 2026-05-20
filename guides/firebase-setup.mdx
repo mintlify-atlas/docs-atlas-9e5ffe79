@@ -1,0 +1,113 @@
+---
+title: 'Firebase Setup for Panahashi Backend'
+description: 'Set up Firebase Auth, Firestore, Storage, and FCM for Panahashi. Covers service account key generation, required Firestore collections, and environment variable configuration.'
+keywords: ['firebase', 'firestore', 'authentication', 'fcm', 'storage', 'setup']
+---
+
+Before starting the backend, you need a Firebase project with several services enabled and a service account key available on the server. This guide walks you through each step so the Kotlin/Ktor application can connect to Firebase on startup.
+
+## Create and configure a Firebase project
+
+<Steps>
+  <Step title="Create a Firebase project">
+    Go to the [Firebase Console](https://console.firebase.google.com) and click **Add project**. Give it a name (for example, `panahashi`), choose your Google Analytics settings, and click **Create project**.
+  </Step>
+
+  <Step title="Enable Authentication">
+    In the left sidebar, go to **Build → Authentication** and click **Get started**. On the **Sign-in method** tab, enable the providers your app uses — at minimum **Email/Password**. Optionally enable **Google** for social sign-in.
+  </Step>
+
+  <Step title="Create a Firestore database">
+    Go to **Build → Firestore Database** and click **Create database**. Choose **Start in production mode** so all access is denied by default, then select a region close to your users. You will add server-side security rules after creating the database.
+  </Step>
+
+  <Step title="Create the required Firestore collections">
+    The backend reads and writes the following collections. Firestore creates a collection automatically when the first document is written, so you do not need to create them manually — but keep this list handy as a reference.
+
+    | Collection | Purpose |
+    |------------|---------|
+    | `users` | User profiles, roles, and FCM tokens |
+    | `bakeries` | Bakery listings managed by baker accounts |
+    | `products` | Products offered by each bakery |
+    | `orders` | Customer orders and their status lifecycle |
+    | `reviews` | Customer reviews for bakeries and products |
+    | `favorites` | Per-user saved bakeries and products |
+    | `carts` | Active shopping carts per user |
+    | `promotions` | Time-limited promotional offers |
+    | `loyalty` | Loyalty stamp cards per user per bakery |
+    | `payments` | Payment records linked to orders |
+  </Step>
+
+  <Step title="Enable Firebase Storage">
+    Go to **Build → Storage** and click **Get started**. Choose **Start in production mode** and select the same region you used for Firestore. The default bucket name follows the pattern `your-project-id.appspot.com`.
+
+    The backend validates uploaded files before storing them:
+    - Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`
+    - Maximum file size: 5 MB
+    - Public URL format: `https://storage.googleapis.com/{bucket}/{path}`
+  </Step>
+
+  <Step title="Enable Cloud Messaging (FCM)">
+    Firebase Cloud Messaging is enabled by default for every project. To confirm it is active, go to **Engage → Messaging** in the sidebar. No additional setup is required — the backend uses the Firebase Admin SDK to send messages server-side.
+  </Step>
+
+  <Step title="Generate a service account key">
+    1. Go to **Project settings** (the gear icon next to **Project Overview**).
+    2. Click the **Service accounts** tab.
+    3. Click **Generate new private key** and confirm.
+    4. A JSON file will download to your machine.
+  </Step>
+
+  <Step title="Save the service account key">
+    Rename the downloaded file to `serviceAccountKey.json` and place it in the root of the project (next to `build.gradle.kts`). The backend reads this path by default.
+
+    <Warning>
+      Never commit `serviceAccountKey.json` to version control. Add it to `.gitignore` immediately. This file grants full admin access to your Firebase project.
+    </Warning>
+  </Step>
+
+  <Step title="Set environment variables">
+    For production environments, configure the following variables instead of relying on the default file path. The application reads environment variables first and falls back to `application.conf` defaults.
+
+    | Variable | Default | Description |
+    |----------|---------|-------------|
+    | `FIREBASE_SERVICE_ACCOUNT_PATH` | `serviceAccountKey.json` | Absolute or relative path to the service account JSON file |
+    | `FIREBASE_DATABASE_URL` | `https://panahashi-default-rtdb.firebaseio.com` | Firebase Realtime Database URL |
+    | `FIREBASE_STORAGE_BUCKET` | `panahashi.appspot.com` | Firebase Storage bucket name |
+
+    ```bash
+    export FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/serviceAccountKey.json
+    export FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
+    export FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+    ```
+  </Step>
+</Steps>
+
+## Firestore security rules
+
+By default, production mode denies all client-side reads and writes. The Panahashi backend accesses Firestore exclusively through the Firebase Admin SDK, which bypasses security rules entirely. Your rules only matter if you ever add client-side SDK access (for example, a web dashboard).
+
+For a server-only setup, you can keep the default deny-all rules:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+<Note>
+  If you add a client-facing interface later, restrict access by requiring `request.auth != null` and verifying the user's role from their `users/{uid}` document before granting any write permission.
+</Note>
+
+## Storage bucket
+
+The backend uploads images to the bucket configured in `FIREBASE_STORAGE_BUCKET`. Make sure this value matches the bucket name shown in **Firebase Console → Storage → Files** (the path at the top of the file browser, without the `gs://` prefix).
+
+<Tip>
+  In Cloud environments such as Google Cloud Run, you can omit the service account key file entirely and use Application Default Credentials instead. See the [deployment guide](/guides/deployment) for details.
+</Tip>

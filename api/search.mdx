@@ -1,0 +1,81 @@
+---
+title: "Search API — Find Bakeries and Products"
+description: "Search active bakeries and available products by name or category. Filter by GPS radius. Query must be at least 2 characters. Returns bakeries and products together."
+---
+
+The Search API lets customers find bakeries and products with a single query. It searches bakery names and product names and categories simultaneously, returning both matching bakeries and matching products with their parent bakery info.
+
+## GET /api/v1/search
+
+**Auth required:** No
+
+<ParamField query="q" type="string" required>Search term (minimum 2 characters). Matched against bakery names and product names/categories.</ParamField>
+<ParamField query="lat" type="number">User latitude. Required if using radius filtering.</ParamField>
+<ParamField query="lng" type="number">User longitude. Required if using radius filtering.</ParamField>
+<ParamField query="radius" type="number">Filter radius in kilometers. Default: `10`. Only applied when `lat` and `lng` are provided.</ParamField>
+<ParamField query="category" type="string">Filter products by category label.</ParamField>
+
+## Response
+
+<ResponseField name="bakeries" type="Bakery[]">Matching active bakeries.</ResponseField>
+<ResponseField name="products" type="ProductSearchResult[]">
+  Matching available products with their parent bakery and optional distance.
+  <Expandable title="ProductSearchResult fields">
+    <ResponseField name="product" type="Product">The matching product object.</ResponseField>
+    <ResponseField name="bakery" type="Bakery">The bakery that sells this product.</ResponseField>
+    <ResponseField name="distanceKm" type="number">Distance from the provided coordinates, or null if no location given.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+Search without location:
+
+```bash
+curl "http://localhost:8080/api/v1/search?q=croissant"
+```
+
+Search with location filter:
+
+```bash
+curl "http://localhost:8080/api/v1/search?q=pan&lat=4.6097&lng=-74.0817&radius=5"
+```
+
+Search with category filter:
+
+```bash
+curl "http://localhost:8080/api/v1/search?q=chocolate&category=Pasteles"
+```
+
+## Sample response
+
+```json
+{
+  "success": true,
+  "data": {
+    "bakeries": [
+      {
+        "id": "bak001",
+        "name": "Panadería El Trigal",
+        "rating": 4.8,
+        "isOpen": true,
+        "status": "ACTIVE"
+      }
+    ],
+    "products": [
+      {
+        "product": {
+          "id": "prod001",
+          "name": "Pan de Chocolate",
+          "price": 2.5,
+          "emoji": "🍫",
+          "availabilityStatus": "READY_NOW",
+          "available": true
+        },
+        "bakery": { "id": "bak001", "name": "Panadería El Trigal" },
+        "distanceKm": 1.3
+      }
+    ]
+  }
+}
+```

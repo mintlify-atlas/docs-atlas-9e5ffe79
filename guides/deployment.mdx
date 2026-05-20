@@ -1,0 +1,126 @@
+---
+title: 'Deploying the Panahashi Backend'
+description: 'Run the Panahashi Ktor backend locally or in production. Covers Gradle build, fat JAR, Docker multi-stage build, environment variables, and Application Default Credentials.'
+keywords: ['deployment', 'docker', 'ktor', 'gradle', 'jar', 'environment variables']
+---
+
+The Panahashi backend is a Ktor application running on the Netty engine. It binds to `0.0.0.0:8080` by default and can be run directly with Gradle during development or packaged as a self-contained fat JAR for production deployments.
+
+## Prerequisites
+
+Before deploying, make sure you have the following in place:
+
+<Columns cols={3}>
+  <Card title="JDK 17" icon="java">
+    The application requires Java 17 or later. Verify with `java -version`.
+  </Card>
+  <Card title="Gradle 8+" icon="hammer">
+    The build uses Gradle wrapper (`./gradlew`). No local Gradle installation required.
+  </Card>
+  <Card title="Firebase configured" icon="fire">
+    Complete the [Firebase setup guide](/guides/firebase-setup) before running the server.
+  </Card>
+</Columns>
+
+## Local development
+
+Running with Gradle starts the server in development mode, which enables hot reload and verbose logging.
+
+```bash
+./gradlew run
+```
+
+The server starts at `http://localhost:8080`. Confirm it is running:
+
+```bash
+curl http://localhost:8080/health
+```
+
+<Note>
+  The JVM flag `-Dio.ktor.development=true` is set automatically when using `./gradlew run` via `applicationDefaultJvmArgs` in `build.gradle.kts`. Do not set this flag in production.
+</Note>
+
+## Building and running a production JAR
+
+The Gradle `build` task produces a fat JAR that bundles the application and all its dependencies into a single file.
+
+```bash
+./gradlew build
+```
+
+After the build completes, run the JAR:
+
+```bash
+java -jar build/libs/panahashi-backend-1.0.0-all.jar
+```
+
+<Tip>
+  Pass environment variables inline if you do not want to export them to the shell session:
+
+  ```bash
+  PORT=9090 FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/key.json \
+    java -jar build/libs/panahashi-backend-1.0.0-all.jar
+  ```
+</Tip>
+
+## Environment variables
+
+All configuration can be overridden at runtime using environment variables. The values in `application.conf` serve as defaults when a variable is not set.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | TCP port the server listens on |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | `serviceAccountKey.json` | Path to the Firebase service account JSON file |
+| `FIREBASE_DATABASE_URL` | `https://panahashi-default-rtdb.firebaseio.com` | Firebase Realtime Database URL |
+| `FIREBASE_STORAGE_BUCKET` | `panahashi.appspot.com` | Firebase Storage bucket name |
+
+## Docker deployment
+
+The following multi-stage Dockerfile builds the fat JAR and packages it into a minimal JRE image.
+
+```dockerfile
+FROM eclipse-temurin:17-jdk AS builder
+WORKDIR /app
+COPY . .
+RUN ./gradlew build --no-daemon
+
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY --from=builder /app/build/libs/*-all.jar app.jar
+COPY serviceAccountKey.json .
+EXPOSE 8080
+CMD ["java", "-jar", "app.jar"]
+```
+
+Build and run the image:
+
+```bash
+docker build -t panahashi-backend .
+docker run -p 8080:8080 \
+  -e FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json \
+  panahashi-backend
+```
+
+<Warning>
+  Baking `serviceAccountKey.json` into the Docker image is convenient for quick tests but is not safe for production. In production, mount the file as a secret volume or use Application Default Credentials (see below).
+</Warning>
+
+## Using Application Default Credentials on Google Cloud
+
+When deploying to a Google Cloud environment such as **Cloud Run**, **GKE**, or **Compute Engine**, you can attach a service account to the compute resource instead of shipping a key file. The Firebase Admin SDK will automatically use Application Default Credentials (ADC) from the environment.
+
+<Steps>
+  <Step title="Attach a service account to your Cloud resource">
+    In the Google Cloud Console, assign a service account with the **Firebase Admin** role (or equivalent Firestore/Storage/FCM permissions) to your Cloud Run service, GKE workload identity, or VM instance.
+  </Step>
+  <Step title="Remove the key file reference">
+    Do not set `FIREBASE_SERVICE_ACCOUNT_PATH`. When the environment variable is absent and `serviceAccountKey.json` does not exist on disk, the Firebase Admin SDK falls back to ADC automatically.
+  </Step>
+  <Step title="Still set the other variables">
+    `FIREBASE_DATABASE_URL` and `FIREBASE_STORAGE_BUCKET` must still be provided as environment variables since they are not inferred from ADC.
+  </Step>
+</Steps>
+
+<Tip>
+  ADC eliminates the need to manage or rotate service account key files. It is the recommended approach for any Google Cloud deployment.
+</Tip>

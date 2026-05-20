@@ -1,0 +1,113 @@
+---
+title: "Promotions API — Discounts and Happy Hour"
+description: "Bakers create percentage, fixed-amount, or happy-hour promotions. Customers apply a promotionId at checkout. Happy-hour discounts are time-window validated."
+---
+
+The Promotions API lets bakers offer discounts on their products. Three promotion types are supported: percentage off, fixed amount off, and happy-hour (percentage discount active only within a specified time window). Customers apply a promotion at order creation by passing `promotionId`.
+
+## Promotion types
+
+| Type | Required fields | Description |
+|------|----------------|-------------|
+| `PERCENTAGE` | `discountPct` (1–100) | Percentage off the order or product total |
+| `FIXED_AMOUNT` | `discountAmount` (> 0) | Fixed currency amount off |
+| `HAPPY_HOUR` | `happyHourStart`, `happyHourEnd`, `discountPct` | Percentage off, active only during specified hours |
+
+## Promotion object
+
+<ResponseField name="id" type="string">Unique promotion ID.</ResponseField>
+<ResponseField name="bakeryId" type="string">Owning bakery ID.</ResponseField>
+<ResponseField name="productId" type="string">If set, discount applies only to this product. Empty string = order-wide.</ResponseField>
+<ResponseField name="title" type="string">Promotion title shown to customers.</ResponseField>
+<ResponseField name="description" type="string">Optional description.</ResponseField>
+<ResponseField name="type" type="string">`PERCENTAGE`, `FIXED_AMOUNT`, or `HAPPY_HOUR`.</ResponseField>
+<ResponseField name="discountPct" type="number">Percentage discount (1–100). Used for PERCENTAGE and HAPPY_HOUR types.</ResponseField>
+<ResponseField name="discountAmount" type="number">Fixed discount amount. Used for FIXED_AMOUNT type.</ResponseField>
+<ResponseField name="happyHourStart" type="string">Start time in HH:mm format (HAPPY_HOUR only).</ResponseField>
+<ResponseField name="happyHourEnd" type="string">End time in HH:mm format (HAPPY_HOUR only).</ResponseField>
+<ResponseField name="active" type="boolean">Whether this promotion is currently active.</ResponseField>
+<ResponseField name="createdAt" type="integer">Creation epoch ms.</ResponseField>
+
+---
+
+## GET /api/v1/promotions
+
+Returns active promotions for a bakery. Public endpoint.
+
+**Auth required:** No
+
+<ParamField query="bakeryId" type="string" required>ID of the bakery.</ParamField>
+
+```bash
+curl "http://localhost:8080/api/v1/promotions?bakeryId=bak001"
+```
+
+---
+
+## GET /api/v1/promotions/me
+
+Returns all promotions (including inactive) for the baker's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/promotions/me
+```
+
+---
+
+## POST /api/v1/promotions
+
+Creates a new promotion for the baker's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="title" type="string" required>Promotion title.</ParamField>
+<ParamField body="description" type="string">Optional description.</ParamField>
+<ParamField body="type" type="string" required>Promotion type.</ParamField>
+<ParamField body="productId" type="string">Target product ID. Omit for order-wide discount.</ParamField>
+<ParamField body="discountPct" type="number">Required for PERCENTAGE and HAPPY_HOUR (1–100).</ParamField>
+<ParamField body="discountAmount" type="number">Required for FIXED_AMOUNT (must be > 0).</ParamField>
+<ParamField body="happyHourStart" type="string">Start time HH:mm. Required for HAPPY_HOUR.</ParamField>
+<ParamField body="happyHourEnd" type="string">End time HH:mm. Required for HAPPY_HOUR.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"10% off mornings","type":"HAPPY_HOUR","discountPct":10,"happyHourStart":"07:00","happyHourEnd":"10:00"}' \
+  http://localhost:8080/api/v1/promotions
+```
+
+---
+
+## PATCH /api/v1/promotions/{id}/toggle
+
+Toggles a promotion active or inactive.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Promotion ID.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/promotions/promo001/toggle
+```
+
+---
+
+## DELETE /api/v1/promotions/{id}
+
+Deletes a promotion. Baker must own the promotion's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Promotion ID.</ParamField>
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/promotions/promo001
+```

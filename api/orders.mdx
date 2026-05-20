@@ -1,0 +1,219 @@
+---
+title: "Orders API — Lifecycle and QR Pickup"
+description: "Full order lifecycle: place orders, track statuses from PENDING to COMPLETED, and verify pickup with QR codes. Covers customer, baker, and admin views."
+---
+
+The Orders API manages the complete lifecycle of a customer order — from placement through QR-code-verified pickup. Customers create orders and track their status; bakers manage fulfillment and scan QR codes at pickup; admins can view all orders across the platform.
+
+## Order statuses
+
+| Status | Description |
+|--------|-------------|
+| `PENDING` | Order placed, awaiting baker confirmation |
+| `CONFIRMED` | Baker confirmed the order |
+| `BAKING` | Baker is preparing the order |
+| `READY` | Order is ready for pickup |
+| `COMPLETED` | Customer picked up — QR verified |
+| `CANCELLED` | Order was cancelled (stock is restored) |
+
+## Order object
+
+<ResponseField name="id" type="string">Unique order ID.</ResponseField>
+<ResponseField name="userId" type="string">Firebase UID of the customer.</ResponseField>
+<ResponseField name="userName" type="string">Customer display name.</ResponseField>
+<ResponseField name="bakeryId" type="string">ID of the bakery.</ResponseField>
+<ResponseField name="bakeryName" type="string">Name of the bakery.</ResponseField>
+<ResponseField name="items" type="CartItem[]">List of ordered items with productId, name, price, emoji, qty.</ResponseField>
+<ResponseField name="total" type="number">Total price after any discount.</ResponseField>
+<ResponseField name="status" type="string">Current order status.</ResponseField>
+<ResponseField name="qrCode" type="string">UUID string for QR pickup verification.</ResponseField>
+<ResponseField name="pickupTime" type="string">Requested pickup time string (e.g. "10:30").</ResponseField>
+<ResponseField name="scheduledFor" type="integer">Optional scheduled pickup epoch ms.</ResponseField>
+<ResponseField name="estimatedReadyAt" type="integer">Baker-set estimated ready epoch ms.</ResponseField>
+<ResponseField name="discountAmount" type="number">Discount applied from a promotion.</ResponseField>
+<ResponseField name="promotionId" type="string">ID of applied promotion, if any.</ResponseField>
+<ResponseField name="paymentStatus" type="string">One of: `PENDING`, `APPROVED`, `REJECTED`, `REFUNDED`.</ResponseField>
+<ResponseField name="paymentMethod" type="string">One of: `CREDIT_CARD`, `DEBIT_CARD`, `PSE`, `CASH_ON_PICKUP`.</ResponseField>
+<ResponseField name="notes" type="string">Optional customer notes.</ResponseField>
+<ResponseField name="createdAt" type="integer">Creation epoch ms.</ResponseField>
+
+---
+
+## POST /api/v1/orders
+
+Places a new order. The bakery must be open, products must be in stock, and pickup time must fall within the bakery's hours.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<Note>Pass the customer's display name in the `X-User-Name` request header. It is stored on the order and shown to the baker. If omitted, it defaults to `"Cliente"`.</Note>
+
+<ParamField body="bakeryId" type="string" required>Target bakery ID.</ParamField>
+<ParamField body="items" type="object[]" required>
+  Array of items to order.
+  <Expandable title="Item fields">
+    <ParamField body="productId" type="string" required>Product ID.</ParamField>
+    <ParamField body="qty" type="integer" required>Quantity (minimum 1).</ParamField>
+  </Expandable>
+</ParamField>
+<ParamField body="pickupTime" type="string" required>Requested pickup time, e.g. "10:30".</ParamField>
+<ParamField body="scheduledFor" type="integer">Epoch ms for advance scheduled orders.</ParamField>
+<ParamField body="notes" type="string">Optional notes for the baker.</ParamField>
+<ParamField body="paymentMethod" type="string" required>One of: `CREDIT_CARD`, `DEBIT_CARD`, `PSE`, `CASH_ON_PICKUP`.</ParamField>
+<ParamField body="promotionId" type="string">Optional promotion ID to apply a discount.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bakeryId": "bak001",
+    "items": [{"productId": "prod001", "qty": 2}],
+    "pickupTime": "10:30",
+    "paymentMethod": "CASH_ON_PICKUP"
+  }' \
+  http://localhost:8080/api/v1/orders
+```
+
+**Response example:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ord789",
+    "status": "PENDING",
+    "total": 7.0,
+    "qrCode": "A1B2C3D4-E5F6-...",
+    "paymentStatus": "PENDING"
+  }
+}
+```
+
+<Note>For CASH_ON_PICKUP orders, the baker is notified via FCM immediately after order creation. For card payments, the notification fires after payment is approved via the Payments API.</Note>
+
+---
+
+## GET /api/v1/orders/me
+
+Returns the authenticated customer's orders, newest first.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField query="page" type="integer">Page number (1-indexed). Default: `1`.</ParamField>
+<ParamField query="pageSize" type="integer">Results per page. Default: `20`.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/orders/me?page=1&pageSize=10"
+```
+
+---
+
+## GET /api/v1/orders/{id}
+
+Returns a single order. Customers can only retrieve their own orders.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="id" type="string" required>Order ID.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/orders/ord789
+```
+
+---
+
+## PATCH /api/v1/orders/{id}/status
+
+Updates the status of an order. Baker must own the order's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Order ID.</ParamField>
+<ParamField body="status" type="string" required>New status: `CONFIRMED`, `BAKING`, `READY`, or `CANCELLED`.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"CONFIRMED"}' \
+  http://localhost:8080/api/v1/orders/ord789/status
+```
+
+<Note>Cancelling an order (`CANCELLED`) automatically restores stock for all items. Completing an order adds a loyalty stamp for the customer.</Note>
+
+---
+
+## PATCH /api/v1/orders/{id}/estimated-ready
+
+Sets the baker's estimated ready time for an order, sent to the customer via FCM notification.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Order ID.</ParamField>
+<ParamField body="estimatedReadyAt" type="integer" required>Epoch milliseconds of estimated ready time.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"estimatedReadyAt":1716220800000}' \
+  http://localhost:8080/api/v1/orders/ord789/estimated-ready
+```
+
+---
+
+## POST /api/v1/orders/verify-qr
+
+Verifies a customer's QR code at pickup. The order must be in `READY` status; on success, status is set to `COMPLETED`.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="qrCode" type="string" required>QR code string from the customer's order.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"qrCode":"A1B2C3D4-E5F6-..."}' \
+  http://localhost:8080/api/v1/orders/verify-qr
+```
+
+<Warning>QR verification only succeeds when the order is in `READY` status and belongs to the baker's bakery.</Warning>
+
+---
+
+## Baker order views
+
+### GET /api/v1/orders/bakery
+
+All orders for the baker's bakery, paginated.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField query="page" type="integer">Page. Default: `1`.</ParamField>
+<ParamField query="pageSize" type="integer">Per page. Default: `20`.</ParamField>
+
+### GET /api/v1/orders/bakery/pending
+
+Only `PENDING` orders for the baker's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+### GET /api/v1/orders/bakery/active
+
+Active orders in statuses `PENDING`, `CONFIRMED`, or `BAKING`.
+
+**Auth required:** Yes — **BAKER**
+
+---
+
+## GET /api/v1/orders/all
+
+Returns all orders across the platform, paginated.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField query="page" type="integer">Page. Default: `1`.</ParamField>
+<ParamField query="pageSize" type="integer">Per page. Default: `20`.</ParamField>

@@ -1,0 +1,136 @@
+{
+  "projectType": "api-service",
+  "projectName": "Panahashi Backend",
+  "projectDescription": "A Kotlin/Ktor REST API backend for the Panahashi bakery marketplace app, powered by Firebase Auth and Firestore.",
+  "theme": "luma",
+  "primaryColor": "#C97D2E",
+  "lightColor": "#F5E6D0",
+  "darkColor": "#7A4A10",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/roles-permissions",
+              "concepts/data-models",
+              "concepts/error-handling"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/firebase-setup",
+              "guides/deployment",
+              "guides/notifications"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Bakeries & Products",
+            "pages": [
+              "api/bakeries",
+              "api/products",
+              "api/search",
+              "api/upload"
+            ]
+          },
+          {
+            "group": "Orders & Payments",
+            "pages": [
+              "api/orders",
+              "api/payments",
+              "api/cart"
+            ]
+          },
+          {
+            "group": "Users & Engagement",
+            "pages": [
+              "api/users",
+              "api/reviews",
+              "api/favorites",
+              "api/promotions",
+              "api/loyalty"
+            ]
+          },
+          {
+            "group": "Admin & Monitoring",
+            "pages": [
+              "api/stats",
+              "api/health"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Firebase Authentication with bearer token verification",
+    "Role-based access control (CUSTOMER, BAKER, ADMIN)",
+    "Multi-bakery marketplace with nearby search (Haversine distance)",
+    "Full order lifecycle management with QR code pickup verification",
+    "Loyalty stamp card system (9 stamps → free item reward)",
+    "Simulated payment processing (credit card, debit, PSE, cash on pickup)",
+    "Firebase Cloud Messaging push notifications for order status changes",
+    "Firebase Storage image uploads for products and bakery branding",
+    "Promotions engine (percentage, fixed amount, happy hour discounts)",
+    "Real-time statistics dashboards for bakers and admins"
+  ],
+  "publicApiSurface": [
+    "GET /health",
+    "GET /api/v1/bakeries",
+    "GET /api/v1/bakeries/nearby",
+    "GET /api/v1/bakeries/{id}",
+    "POST /api/v1/bakeries",
+    "PATCH /api/v1/bakeries/{id}",
+    "DELETE /api/v1/bakeries/{id}",
+    "GET /api/v1/products",
+    "GET /api/v1/products/{id}",
+    "POST /api/v1/products",
+    "PATCH /api/v1/products/{id}",
+    "PATCH /api/v1/products/{id}/stock",
+    "DELETE /api/v1/products/{id}",
+    "POST /api/v1/orders",
+    "GET /api/v1/orders/me",
+    "GET /api/v1/orders/{id}",
+    "PATCH /api/v1/orders/{id}/status",
+    "POST /api/v1/orders/verify-qr",
+    "GET /api/v1/users/me",
+    "PATCH /api/v1/users/me",
+    "GET /api/v1/reviews",
+    "POST /api/v1/reviews",
+    "POST /api/v1/upload/product/{productId}",
+    "GET /api/v1/favorites",
+    "POST /api/v1/favorites/{bakeryId}",
+    "GET /api/v1/cart",
+    "POST /api/v1/cart/items",
+    "GET /api/v1/promotions",
+    "POST /api/v1/promotions",
+    "GET /api/v1/loyalty",
+    "POST /api/v1/loyalty/redeem",
+    "POST /api/v1/payments",
+    "GET /api/v1/stats/bakery",
+    "GET /api/v1/stats/admin",
+    "GET /api/v1/search"
+  ]
+}

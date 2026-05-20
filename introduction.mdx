@@ -1,0 +1,66 @@
+---
+title: "Panahashi Backend: Bakery Marketplace REST API"
+description: "Panahashi Backend is a Kotlin/Ktor REST API powering a multi-bakery marketplace. Supports Firebase Auth, orders, loyalty, payments, and push notifications."
+---
+
+Panahashi Backend is the server-side engine behind the Panahashi bakery marketplace app. Built with **Kotlin** and **Ktor**, it exposes a versioned REST API under `/api/v1` and integrates tightly with **Firebase** for authentication, data storage, image hosting, and push notifications.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up the server and make your first API call in minutes.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Learn how to obtain and pass Firebase ID tokens to protected endpoints.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Browse every endpoint grouped by resource — bakeries, orders, users, and more.
+  </Card>
+  <Card title="Roles & Permissions" icon="shield" href="/concepts/roles-permissions">
+    Understand the CUSTOMER, BAKER, and ADMIN role system.
+  </Card>
+</CardGroup>
+
+## What Panahashi Backend does
+
+The API serves three distinct audiences — customers browsing and ordering bread, bakers managing their storefronts, and platform admins overseeing the whole marketplace. Every request is authenticated via Firebase ID tokens, and role-based guards control which actions each audience can perform.
+
+<CardGroup cols={3}>
+  <Card title="Bakeries & Products" icon="store">
+    Multi-bakery catalog with nearby search, image uploads, and stock management.
+  </Card>
+  <Card title="Orders & QR Pickup" icon="qrcode">
+    Full order lifecycle from cart to QR-verified pickup, with real-time status updates.
+  </Card>
+  <Card title="Loyalty & Promotions" icon="star">
+    Stamp card rewards (9 stamps = free item) and flexible discount promotions.
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+| Technology | Role |
+|------------|------|
+| Kotlin 2.0 + Ktor 3.1 | HTTP server framework |
+| Firebase Auth | Bearer token authentication |
+| Cloud Firestore | Primary database |
+| Firebase Storage | Product and bakery images |
+| Firebase Cloud Messaging | Push notifications |
+| Kotlinx Serialization | JSON serialization |
+| Gradle | Build tool |
+
+## Getting started
+
+<Steps>
+  <Step title="Configure Firebase">
+    Create a Firebase project with Firestore, Authentication, Storage, and FCM enabled. Download your service account key.
+  </Step>
+  <Step title="Run the server">
+    Place `serviceAccountKey.json` in the project root and run `./gradlew run`. The server starts on port 8080.
+  </Step>
+  <Step title="Obtain a token">
+    Authenticate a user with Firebase on the client side and call `auth().currentUser.getIdToken()` to get an ID token.
+  </Step>
+  <Step title="Call the API">
+    Pass the token as `Authorization: Bearer <token>` on every protected request.
+  </Step>
+</Steps>

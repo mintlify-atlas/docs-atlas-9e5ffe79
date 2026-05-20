@@ -1,0 +1,214 @@
+---
+title: 'Error Handling in the Panahashi API'
+description: 'How Panahashi surfaces errors: the ApiError shape, HTTP status codes 400/401/403/404/500, all error code strings, and the ApiResponse and PagedResponse envelope formats.'
+keywords: ['error handling', 'ApiError', 'HTTP status codes', 'UNAUTHORIZED', 'NOT_FOUND', 'VALIDATION_ERROR', 'ApiResponse', 'pagination']
+---
+
+Panahashi uses a consistent error response format across all endpoints. When a request fails, the API returns a JSON object with a machine-readable `code` and a human-readable `message`. Successful responses are always wrapped in an `ApiResponse<T>` envelope. Understanding the error shape and the status codes the API uses makes it straightforward to write reliable client-side error handling.
+
+## ApiError response shape
+
+Every error response — regardless of cause — uses the same `ApiError` structure.
+
+<ResponseField name="code" type="string" required>
+  A machine-readable error identifier. Use this in your client code to branch on specific error types.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  A human-readable description of what went wrong. May be in Spanish for auth errors.
+</ResponseField>
+
+```json Example error response
+{
+  "code": "NOT_FOUND",
+  "message": "Bakery not found"
+}
+```
+
+<Note>
+  Error responses are **not** wrapped in `ApiResponse`. They are returned as a plain `ApiError` object directly at the top level.
+</Note>
+
+---
+
+## HTTP status codes
+
+<AccordionGroup>
+  <Accordion title="200 OK / 201 Created — Success">
+    The request succeeded. The response body is an `ApiResponse<T>` with `success: true` and the result in `data`. `201 Created` is used for resource creation endpoints (e.g. `POST /api/v1/orders`).
+
+    ```json
+    {
+      "success": true,
+      "data": { "id": "order-abc123", "status": "PENDING" },
+      "message": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="400 Bad Request — Validation or malformed input">
+    The request body or query parameters are invalid. This can come from a failed input validation (`VALIDATION_ERROR`) or a business rule rejection (`BAD_REQUEST`).
+
+    ```json
+    {
+      "code": "VALIDATION_ERROR",
+      "message": "price must be greater than 0, name must not be blank"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="401 Unauthorized — Invalid or missing token">
+    The `Authorization` header is missing, the Firebase ID token is expired, or the token cannot be verified. Re-authenticate the user and obtain a fresh token.
+
+    ```json
+    {
+      "code": "UNAUTHORIZED",
+      "message": "Token inválido o expirado"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="403 Forbidden — Insufficient role">
+    The token is valid but the caller's role does not permit the action. For example, a `CUSTOMER` trying to update an order status gets a 403.
+
+    ```json
+    {
+      "code": "UNAUTHORIZED",
+      "message": "Token inválido o expirado"
+    }
+    ```
+
+    <Warning>
+      The `code` field for 403 responses is `UNAUTHORIZED` (matching the Ktor `StatusPages` handler). Check the HTTP status code — not just the `code` field — to distinguish 401 from 403 in your client.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="404 Not Found — Resource does not exist">
+    The requested resource could not be found in Firestore. Thrown when a route handler calls `noSuchElementException` (or equivalent).
+
+    ```json
+    {
+      "code": "NOT_FOUND",
+      "message": "Order not found"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="500 Internal Server Error — Unexpected failure">
+    An unhandled exception occurred on the server. The response body always contains a generic message to avoid leaking internals.
+
+    ```json
+    {
+      "code": "INTERNAL_ERROR",
+      "message": "Internal server error"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Error codes reference
+
+| Code | HTTP status | Cause |
+|---|---|---|
+| `UNAUTHORIZED` | 401 or 403 | Missing/invalid Firebase token, or caller's role is insufficient |
+| `BAD_REQUEST` | 400 | Malformed request body or business rule violation (`IllegalArgumentException`) |
+| `VALIDATION_ERROR` | 400 | Request failed Ktor's `RequestValidationException` checks |
+| `NOT_FOUND` | 404 | Resource not found in Firestore (`NoSuchElementException`) |
+| `INTERNAL_ERROR` | 500 | Unhandled server exception |
+
+---
+
+## Common errors and how to resolve them
+
+| Scenario | Code | HTTP | Resolution |
+|---|---|---|---|
+| Firebase token expired | `UNAUTHORIZED` | 401 | Call `FirebaseAuth.currentUser.getIdToken(true)` to force-refresh the token and retry. |
+| No `Authorization` header sent | `UNAUTHORIZED` | 401 | Ensure every protected request includes `Authorization: Bearer <id_token>`. |
+| `CUSTOMER` calls a `BAKER`-only route | `UNAUTHORIZED` | 403 | Check the endpoint's required role in the [roles reference](/concepts/roles-permissions) before calling. |
+| `bakeryId` query param missing on product list | `BAD_REQUEST` | 400 | Include `?bakeryId=<id>` in the request URL. |
+| Submitting a review for a non-existent order | `NOT_FOUND` | 404 | Verify the `orderId` exists and belongs to the authenticated user. |
+| Negative or zero price on product creation | `VALIDATION_ERROR` | 400 | Check validation error `message` for the specific field(s) that failed. |
+| Firestore service temporarily unavailable | `INTERNAL_ERROR` | 500 | Retry with exponential backoff. If the issue persists, contact support. |
+
+---
+
+## ApiResponse wrapper
+
+Successful responses are always wrapped in `ApiResponse<T>`:
+
+<ResponseField name="success" type="boolean" required>
+  Always `true` for successful responses.
+</ResponseField>
+
+<ResponseField name="data" type="T | null">
+  The response payload. The type varies by endpoint — see each endpoint's reference for the concrete type returned.
+</ResponseField>
+
+<ResponseField name="message" type="string | null">
+  Optional human-readable message. Often `null` on success, populated on some create/action endpoints.
+</ResponseField>
+
+```json Successful single-object response
+{
+  "success": true,
+  "data": {
+    "id": "bakery-xyz789",
+    "name": "La Panadería Feliz",
+    "rating": 4.8,
+    "isOpen": true
+  },
+  "message": null
+}
+```
+
+<Tip>
+  Always check `success` before reading `data`. Even a `200 OK` could theoretically return `success: false` for partial-failure scenarios in future API versions.
+</Tip>
+
+---
+
+## Pagination with PagedResponse
+
+List endpoints that return many results use `PagedResponse<T>` instead of a plain array. Pass `page` and `pageSize` as query parameters to control which slice you receive.
+
+<ResponseField name="data" type="T[]" required>
+  Items on the current page.
+</ResponseField>
+
+<ResponseField name="page" type="number" required>
+  Current page number (1-based).
+</ResponseField>
+
+<ResponseField name="pageSize" type="number" required>
+  Maximum items per page as requested.
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Total item count across all pages.
+</ResponseField>
+
+<ResponseField name="hasMore" type="boolean" required>
+  `true` when additional pages exist beyond the current one.
+</ResponseField>
+
+```bash Fetching the second page of products
+GET /api/v1/products?bakeryId=bakery-xyz789&page=2&pageSize=20
+```
+
+```json PagedResponse example
+{
+  "data": [
+    { "id": "prod-021", "name": "Pan de bono", "price": 2000 }
+  ],
+  "page": 2,
+  "pageSize": 20,
+  "total": 47,
+  "hasMore": true
+}
+```
+
+<Note>
+  When `hasMore` is `false`, you have received the final page. Requesting a page number beyond `total / pageSize` returns an empty `data` array.
+</Note>

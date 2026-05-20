@@ -1,0 +1,109 @@
+---
+title: "Users API — Profiles and Role Management"
+description: "Manage user profiles for customers, bakers, and admins. Customers update their own profile; admins can list all users and change roles."
+---
+
+The Users API manages user profiles stored in Firestore. A profile is created automatically the first time a user calls `GET /api/v1/users/me` after authenticating. Profiles inherit the display name and email from their Firebase Auth record.
+
+## UserProfile object
+
+<ResponseField name="uid" type="string">Firebase UID.</ResponseField>
+<ResponseField name="displayName" type="string">Display name from Firebase Auth.</ResponseField>
+<ResponseField name="email" type="string">Email address.</ResponseField>
+<ResponseField name="phone" type="string">Phone number.</ResponseField>
+<ResponseField name="role" type="string">One of: `CUSTOMER`, `BAKER`, `ADMIN`. Default: `CUSTOMER`.</ResponseField>
+<ResponseField name="bakeryId" type="string">Linked bakery ID (set when a BAKER role user is assigned a bakery).</ResponseField>
+<ResponseField name="fcmToken" type="string">Firebase Cloud Messaging device token for push notifications.</ResponseField>
+<ResponseField name="createdAt" type="integer">Profile creation epoch ms.</ResponseField>
+
+---
+
+## GET /api/v1/users/me
+
+Returns the authenticated user's profile. Creates the profile automatically if it doesn't exist yet.
+
+**Auth required:** Yes (any role)
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/users/me
+```
+
+---
+
+## PATCH /api/v1/users/me
+
+Updates the authenticated user's profile. All fields are optional.
+
+**Auth required:** Yes (any role)
+
+<ParamField body="displayName" type="string">New display name.</ParamField>
+<ParamField body="phone" type="string">Phone number.</ParamField>
+<ParamField body="fcmToken" type="string">FCM device token for push notifications. Update this whenever the token refreshes on the client.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+57 300 123 4567","fcmToken":"device-token-xyz"}' \
+  http://localhost:8080/api/v1/users/me
+```
+
+<Tip>Always update `fcmToken` when your Firebase messaging token refreshes so you continue receiving push notifications.</Tip>
+
+---
+
+## GET /api/v1/users
+
+Returns all user profiles sorted by display name.
+
+**Auth required:** Yes — **ADMIN**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/users
+```
+
+---
+
+## GET /api/v1/users/bakers
+
+Returns all users with the `BAKER` role.
+
+**Auth required:** Yes — **ADMIN**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/users/bakers
+```
+
+---
+
+## GET /api/v1/users/{uid}
+
+Returns a single user's profile by UID.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField path="uid" type="string" required>Firebase UID of the user.</ParamField>
+
+---
+
+## PATCH /api/v1/users/{uid}/role
+
+Changes a user's role.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField path="uid" type="string" required>Firebase UID of the user.</ParamField>
+<ParamField body="role" type="string" required>New role: `CUSTOMER`, `BAKER`, or `ADMIN`.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"BAKER"}' \
+  http://localhost:8080/api/v1/users/uid123/role
+```
+
+<Note>Changing a user to `BAKER` does not automatically assign a bakery. An admin must create a bakery with the user's UID as `ownerId` separately.</Note>

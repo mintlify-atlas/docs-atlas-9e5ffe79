@@ -1,0 +1,87 @@
+---
+title: "Loyalty API — Stamp Cards and Rewards"
+description: "Per-bakery stamp cards for customers. Earn one stamp per completed order; 9 stamps unlocks a free item. Bakers redeem rewards via the loyalty endpoint."
+---
+
+The Loyalty API manages per-bakery stamp cards for customers. Each customer gets a separate card for every bakery they order from. Stamps are added automatically when an order reaches `COMPLETED` status. Every 9 stamps earns one free item, which a baker can redeem.
+
+## LoyaltyCard object
+
+<ResponseField name="id" type="string">Card ID — formatted as `{userId}_{bakeryId}`.</ResponseField>
+<ResponseField name="userId" type="string">Card owner's Firebase UID.</ResponseField>
+<ResponseField name="bakeryId" type="string">Bakery this card belongs to.</ResponseField>
+<ResponseField name="stamps" type="integer">Current stamp count (0–8 before reward).</ResponseField>
+<ResponseField name="stampsForReward" type="integer">Stamps required for one reward. Always `9`.</ResponseField>
+<ResponseField name="totalRewardsEarned" type="integer">Lifetime rewards earned.</ResponseField>
+<ResponseField name="freeItemsAvailable" type="integer">Unclaimed free items available to redeem.</ResponseField>
+<ResponseField name="updatedAt" type="integer">Last updated epoch ms.</ResponseField>
+
+---
+
+## GET /api/v1/loyalty
+
+Returns all loyalty cards for the authenticated customer across all bakeries.
+
+**Auth required:** Yes — **CUSTOMER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/loyalty
+```
+
+---
+
+## GET /api/v1/loyalty/{bakeryId}
+
+Returns the customer's loyalty card for a specific bakery. Creates the card if it doesn't exist yet.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="bakeryId" type="string" required>Bakery ID.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/loyalty/bak001
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uid123_bak001",
+    "stamps": 4,
+    "stampsForReward": 9,
+    "freeItemsAvailable": 0,
+    "totalRewardsEarned": 1
+  }
+}
+```
+
+---
+
+## POST /api/v1/loyalty/redeem
+
+Redeems one free item from a customer's loyalty card for the baker's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="userId" type="string" required>Firebase UID of the customer whose reward to redeem.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"uid123"}' \
+  http://localhost:8080/api/v1/loyalty/redeem
+```
+
+<Note>Returns 400 if the customer has no free items available (`freeItemsAvailable = 0`).</Note>
+
+## How stamps are earned
+
+Stamps are added automatically — you don't need to call any endpoint. When a baker marks an order as `COMPLETED` (or verifies the QR), the system:
+
+1. Adds one stamp to the customer's card for that bakery.
+2. If stamps reach a multiple of 9, increments `freeItemsAvailable` by 1 and `totalRewardsEarned` by 1.
+3. Sends the customer a push notification announcing their stamp progress.

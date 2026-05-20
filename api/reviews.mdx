@@ -1,0 +1,91 @@
+---
+title: "Reviews API — Bakery Ratings and Feedback"
+description: "Customers can leave reviews for bakeries after completing an order. Reviews update the bakery's average rating automatically. Each order allows one review."
+---
+
+The Reviews API lets customers rate bakeries after completing an order. Each completed order allows exactly one review. Submitting a review automatically recalculates and updates the bakery's `rating` and `totalReviews` fields.
+
+## Review object
+
+<ResponseField name="id" type="string">Unique review ID.</ResponseField>
+<ResponseField name="bakeryId" type="string">ID of the reviewed bakery.</ResponseField>
+<ResponseField name="userId" type="string">Firebase UID of the reviewer.</ResponseField>
+<ResponseField name="userName" type="string">Reviewer's display name.</ResponseField>
+<ResponseField name="orderId" type="string">ID of the completed order being reviewed.</ResponseField>
+<ResponseField name="rating" type="integer">Rating from 1 to 5.</ResponseField>
+<ResponseField name="comment" type="string">Review text.</ResponseField>
+<ResponseField name="createdAt" type="integer">Creation epoch ms.</ResponseField>
+
+---
+
+## GET /api/v1/reviews
+
+Returns paginated reviews for a bakery. Public endpoint.
+
+**Auth required:** No
+
+<ParamField query="bakeryId" type="string" required>ID of the bakery.</ParamField>
+<ParamField query="page" type="integer">Page number. Default: `1`.</ParamField>
+<ParamField query="pageSize" type="integer">Results per page. Default: `20`.</ParamField>
+
+```bash
+curl "http://localhost:8080/api/v1/reviews?bakeryId=bak001&page=1&pageSize=10"
+```
+
+---
+
+## POST /api/v1/reviews
+
+Creates a review for a bakery. Requires a completed order from the authenticated user.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<Note>Pass the reviewer's display name in the `X-User-Name` request header. It is stored on the review and shown publicly. If omitted, it defaults to `"Cliente"`.</Note>
+
+<ParamField body="orderId" type="string" required>ID of the completed order to review.</ParamField>
+<ParamField body="rating" type="integer" required>Rating from 1 to 5.</ParamField>
+<ParamField body="comment" type="string">Optional review text.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"ord789","rating":5,"comment":"Excelente pan artesanal!"}' \
+  http://localhost:8080/api/v1/reviews
+```
+
+<Warning>Returns 400 if the order is not in `COMPLETED` status, does not belong to the user, or has already been reviewed.</Warning>
+
+---
+
+## GET /api/v1/reviews/me
+
+Returns all reviews written by the authenticated customer.
+
+**Auth required:** Yes — **CUSTOMER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/reviews/me
+```
+
+---
+
+## GET /api/v1/reviews/can-review/{orderId}
+
+Checks whether the authenticated user can review a given order (order is COMPLETED and not yet reviewed).
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField path="orderId" type="string" required>Order ID to check.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/reviews/can-review/ord789
+```
+
+**Response:**
+```json
+{ "success": true, "data": { "canReview": true } }
+```
+`canReview: true` means the order is reviewable (completed and not yet reviewed).

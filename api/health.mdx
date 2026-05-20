@@ -1,0 +1,30 @@
+---
+title: "Health Check Endpoint"
+description: "GET /health returns the server status and version. Use this endpoint to verify the server is running before making authenticated API calls."
+---
+
+The health check endpoint is publicly accessible and returns the current status of the Panahashi Backend server. It requires no authentication and is useful for uptime monitoring and deployment readiness checks.
+
+## GET /health
+
+**Auth required:** No
+
+```bash
+curl http://localhost:8080/health
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "service": "panahashi-backend",
+  "version": "1.0.0"
+}
+```
+
+<ResponseField name="status" type="string">Always `"ok"` when the server is running.</ResponseField>
+<ResponseField name="service" type="string">Service identifier: `"panahashi-backend"`.</ResponseField>
+<ResponseField name="version" type="string">Current API version.</ResponseField>
+
+<Tip>Use this endpoint as a readiness probe in your container orchestration setup to ensure the server is ready before routing traffic.</Tip>

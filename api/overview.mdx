@@ -1,0 +1,120 @@
+---
+title: "Panahashi API Reference Overview"
+description: "Complete reference for the Panahashi Backend REST API. All endpoints live under /api/v1, require Firebase ID token auth, and return a consistent JSON envelope."
+---
+
+The Panahashi Backend exposes a REST API versioned under `/api/v1`. Every response is wrapped in a consistent `ApiResponse` envelope, and protected endpoints require a Firebase ID token passed as a Bearer token. This page covers the base URL, authentication, response formats, and a full index of available resources.
+
+## Base URL
+
+```
+http://localhost:8080
+```
+
+All API routes are prefixed with `/api/v1`.
+
+## Authentication
+
+Protected routes require a Firebase ID token in the `Authorization` header:
+
+```bash
+Authorization: Bearer <firebase-id-token>
+```
+
+See [Authentication](/authentication) for how to obtain and refresh tokens.
+
+## Response format
+
+All endpoints return JSON wrapped in `ApiResponse<T>`:
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": null
+}
+```
+
+Errors return an `ApiError`:
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "Resource not found"
+}
+```
+
+## Pagination
+
+Paginated endpoints accept `page` (1-indexed) and `pageSize` query parameters and return:
+
+```json
+{
+  "data": [...],
+  "page": 1,
+  "pageSize": 20,
+  "total": 100,
+  "hasMore": true
+}
+```
+
+## Endpoint index
+
+| Resource | Method | Path |
+|----------|--------|------|
+| Health | GET | /health |
+| Bakeries | GET | /api/v1/bakeries |
+| Bakeries | GET | /api/v1/bakeries/nearby |
+| Bakeries | GET | /api/v1/bakeries/{id} |
+| Bakeries | POST | /api/v1/bakeries |
+| Bakeries | PATCH | /api/v1/bakeries/{id} |
+| Bakeries | DELETE | /api/v1/bakeries/{id} |
+| Bakeries | GET | /api/v1/bakeries/me |
+| Bakeries | PATCH | /api/v1/bakeries/me |
+| Bakeries | PATCH | /api/v1/bakeries/me/open |
+| Products | GET | /api/v1/products |
+| Products | GET | /api/v1/products/{id} |
+| Products | POST | /api/v1/products |
+| Products | PATCH | /api/v1/products/{id} |
+| Products | PATCH | /api/v1/products/{id}/stock |
+| Products | DELETE | /api/v1/products/{id} |
+| Orders | POST | /api/v1/orders |
+| Orders | GET | /api/v1/orders/me |
+| Orders | GET | /api/v1/orders/{id} |
+| Orders | PATCH | /api/v1/orders/{id}/status |
+| Orders | POST | /api/v1/orders/verify-qr |
+| Payments | POST | /api/v1/payments |
+| Payments | GET | /api/v1/payments/order/{orderId} |
+| Cart | GET | /api/v1/cart |
+| Cart | POST | /api/v1/cart/items |
+| Cart | PATCH | /api/v1/cart/items |
+| Cart | DELETE | /api/v1/cart |
+| Users | GET | /api/v1/users/me |
+| Users | PATCH | /api/v1/users/me |
+| Reviews | GET | /api/v1/reviews |
+| Reviews | POST | /api/v1/reviews |
+| Favorites | GET | /api/v1/favorites |
+| Favorites | POST | /api/v1/favorites/{bakeryId} |
+| Promotions | GET | /api/v1/promotions |
+| Promotions | POST | /api/v1/promotions |
+| Loyalty | GET | /api/v1/loyalty |
+| Loyalty | POST | /api/v1/loyalty/redeem |
+| Upload | POST | /api/v1/upload/product/{productId} |
+| Stats | GET | /api/v1/stats/bakery |
+| Stats | GET | /api/v1/stats/admin |
+| Search | GET | /api/v1/search |
+
+<CardGroup cols={2}>
+  <Card title="Bakeries & Products" icon="store" href="/api/bakeries">
+    Manage bakery listings, product catalogs, and stock.
+  </Card>
+  <Card title="Orders & Payments" icon="shopping-cart" href="/api/orders">
+    Place orders, process payments, and track order status.
+  </Card>
+  <Card title="Users & Engagement" icon="user" href="/api/users">
+    User profiles, reviews, favorites, promotions, and loyalty.
+  </Card>
+  <Card title="Admin & Monitoring" icon="chart-bar" href="/api/stats">
+    Statistics dashboards and health monitoring.
+  </Card>
+</CardGroup>

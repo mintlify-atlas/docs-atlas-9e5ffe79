@@ -1,0 +1,340 @@
+---
+title: "Authentication: Firebase ID Tokens Explained"
+description: "Learn how Panahashi Backend uses Firebase ID tokens for authentication, how to attach them to API requests, and how to handle token expiry and refresh."
+keywords: ["authentication", "firebase", "id token", "bearer token", "authorization", "jwt"]
+---
+
+Panahashi Backend uses **Firebase Authentication** to verify every request to a protected endpoint. Clients authenticate through Firebase on the device and send the resulting ID token to the server. The server validates that token using the Firebase Admin SDK and, if valid, identifies the requesting user by their Firebase UID.
+
+## How Firebase ID tokens work
+
+A Firebase ID token is a short-lived [JSON Web Token (JWT)](https://jwt.io) issued by Firebase after a user signs in. It contains the user's UID, email, sign-in provider, and other claims — all cryptographically signed by Google.
+
+When a client calls `user.getIdToken()`, Firebase returns this JWT. The Panahashi Backend receives it in the `Authorization` header, calls `FirebaseAuth.getInstance().verifyIdToken(token)`, and extracts the UID to identify the caller. No session state is stored on the server — every request is validated independently.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Firebase Auth
+    participant Panahashi Backend
+
+    Client->>Firebase Auth: signIn(email, password)
+    Firebase Auth-->>Client: ID token (JWT, 1 hour TTL)
+    Client->>Panahashi Backend: GET /api/v1/users/me\nAuthorization: Bearer <id-token>
+    Panahashi Backend->>Firebase Auth: verifyIdToken(token)
+    Firebase Auth-->>Panahashi Backend: decoded token (uid, email, claims)
+    Panahashi Backend-->>Client: 200 OK — user profile
+```
+
+## Getting an ID token on the client
+
+Obtain an ID token by signing the user in with the Firebase client SDK for your platform. The token is available immediately after a successful sign-in and can be refreshed at any time.
+
+<Tabs>
+  <Tab title="Web (firebase/auth)">
+    ```javascript
+    import { initializeApp } from "firebase/app";
+    import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+
+    const app = initializeApp({
+      apiKey: "YOUR_WEB_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+    });
+
+    const auth = getAuth(app);
+
+    const { user } = await signInWithEmailAndPassword(
+      auth,
+      "user@example.com",
+      "password123"
+    );
+
+    // Get the current ID token
+    const idToken = await user.getIdToken();
+    ```
+  </Tab>
+  <Tab title="React Native (@react-native-firebase/auth)">
+    ```javascript
+    import auth from "@react-native-firebase/auth";
+
+    // Sign in
+    const { user } = await auth().signInWithEmailAndPassword(
+      "user@example.com",
+      "password123"
+    );
+
+    // Get the current ID token
+    const idToken = await user.getIdToken();
+    ```
+  </Tab>
+</Tabs>
+
+## Passing the token in API requests
+
+Include the ID token in the `Authorization` header of every request to a protected endpoint. Use the `Bearer` scheme — a space separates `Bearer` from the token string.
+
+```bash
+curl -X GET http://localhost:8080/api/v1/users/me \
+  -H "Authorization: Bearer YOUR_FIREBASE_ID_TOKEN"
+```
+
+The header format is always:
+
+```
+Authorization: Bearer <firebase-id-token>
+```
+
+<Warning>
+  Omitting the `Authorization` header, or sending a malformed or expired token, results in a `401 Unauthorized` response. The server does not issue or manage its own tokens — only Firebase-issued ID tokens are accepted.
+</Warning>
+
+Here is a full example fetching the current user's profile using `fetch` in JavaScript:
+
+```javascript
+const response = await fetch("http://localhost:8080/api/v1/users/me", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${idToken}`,
+    "Content-Type": "application/json",
+  },
+});
+
+const profile = await response.json();
+console.log(profile);
+```
+
+## Token expiry and refresh
+
+Firebase ID tokens expire after **1 hour**. Sending an expired token returns `401 Unauthorized`. You must refresh the token before making further requests.
+
+### Refreshing on demand
+
+Call `getIdToken(true)` with `forceRefresh: true` to get a fresh token immediately, regardless of whether the current token has expired:
+
+<Tabs>
+  <Tab title="Web (firebase/auth)">
+    ```javascript
+    import { getAuth } from "firebase/auth";
+
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (user) {
+      // forceRefresh: true always fetches a new token from Firebase
+      const freshToken = await user.getIdToken(true);
+    }
+    ```
+  </Tab>
+  <Tab title="React Native (@react-native-firebase/auth)">
+    ```javascript
+    import auth from "@react-native-firebase/auth";
+
+    const user = auth().currentUser;
+
+    if (user) {
+      const freshToken = await user.getIdToken(true);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Automatic refresh with an auth state listener
+
+The recommended pattern is to listen for auth state changes and always read the token from the current user object. Firebase refreshes the underlying token automatically in the background:
+
+```javascript
+import { getAuth, onIdTokenChanged } from "firebase/auth";
+
+const auth = getAuth();
+
+// Called whenever the token is refreshed (roughly every hour)
+onIdTokenChanged(auth, async (user) => {
+  if (user) {
+    const idToken = await user.getIdToken();
+    // Store idToken in your app state / HTTP client headers
+  }
+});
+```
+
+<Tip>
+  In React Native, use `onIdTokenChanged` from `@react-native-firebase/auth` in the same way. Attach the listener early in your app's lifecycle so the token is always fresh before any API call is made.
+</Tip>
+
+## Public vs protected endpoints
+
+Some endpoints are intentionally public — they do not require an `Authorization` header and return data to any caller. All other endpoints require a valid Firebase ID token.
+
+| Endpoint | Method | Auth required |
+|---|---|---|
+| `/health` | GET | No |
+| `/api/v1/bakeries` | GET | No |
+| `/api/v1/bakeries/nearby` | GET | No |
+| `/api/v1/bakeries/{id}` | GET | No |
+| `/api/v1/products` | GET (with `?bakeryId=`) | No |
+| `/api/v1/reviews` | GET (with `?bakeryId=`) | No |
+| `/api/v1/promotions` | GET (with `?bakeryId=`) | No |
+| `/api/v1/search` | GET | No |
+| `/api/v1/users/*` | ALL | **Yes** |
+| `/api/v1/orders/*` | ALL | **Yes** |
+| `/api/v1/cart/*` | ALL | **Yes** |
+| `/api/v1/favorites/*` | ALL | **Yes** |
+| `/api/v1/loyalty/*` | ALL | **Yes** |
+| `/api/v1/payments/*` | ALL | **Yes** |
+| `/api/v1/upload` | ALL | **Yes** |
+| `/api/v1/stats/*` | ALL | **Yes** |
+| `/api/v1/bakeries/*` (write) | POST, PUT, DELETE | **Yes** |
+| `/api/v1/products/*` (write) | POST, PUT, DELETE | **Yes** |
+| `/api/v1/reviews/*` (write) | POST, PUT, DELETE | **Yes** |
+| `/api/v1/promotions/*` (write) | POST, PUT, DELETE | **Yes** |
+
+<Note>
+  Even for public read endpoints, passing a valid token is harmless and may enable additional personalized data in the response (for example, whether a bakery is in the user's favorites list).
+</Note>
+
+## Error responses
+
+The server returns standard HTTP status codes for authentication and authorization failures.
+
+### 401 Unauthorized
+
+Returned when no token is provided, the token is malformed, or the token has expired.
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Missing or invalid Authorization header."
+}
+```
+
+Common causes:
+
+- The `Authorization` header is missing entirely.
+- The header value does not start with `Bearer `.
+- The token string is truncated or corrupted.
+- The token has expired (older than 1 hour) and was not refreshed.
+
+### 403 Forbidden
+
+Returned when the token is valid but the authenticated user's role does not permit the requested action. For example, a `CUSTOMER` attempting to access baker-only or admin-only endpoints.
+
+```json
+{
+  "error": "Forbidden",
+  "message": "You do not have permission to perform this action."
+}
+```
+
+### 500 Internal server error
+
+If token verification fails due to a misconfigured Firebase Admin SDK (for example, a missing or invalid `serviceAccountKey.json`), the server returns a `500`. Check the server logs for a `FirebaseException` or `IOException` from `FirebaseConfig`.
+
+## Code examples by environment
+
+<Tabs>
+  <Tab title="React Native">
+    ```javascript
+    import auth from "@react-native-firebase/auth";
+
+    /**
+     * Returns a fresh ID token for the current user,
+     * or null if no user is signed in.
+     */
+    async function getAuthHeader() {
+      const user = auth().currentUser;
+      if (!user) return null;
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    }
+
+    // Example: fetch the current user's profile
+    async function fetchMyProfile() {
+      const headers = await getAuthHeader();
+      if (!headers) throw new Error("Not signed in");
+
+      const response = await fetch(
+        "http://localhost:8080/api/v1/users/me",
+        { headers }
+      );
+
+      if (response.status === 401) {
+        // Token may have just expired — force refresh and retry
+        const freshToken = await auth().currentUser?.getIdToken(true);
+        return fetch("http://localhost:8080/api/v1/users/me", {
+          headers: { Authorization: `Bearer ${freshToken}` },
+        });
+      }
+
+      return response.json();
+    }
+    ```
+  </Tab>
+  <Tab title="Web (firebase/auth)">
+    ```javascript
+    import { getAuth } from "firebase/auth";
+
+    /**
+     * Returns an Authorization header with a current ID token,
+     * or null if no user is signed in.
+     */
+    async function getAuthHeader() {
+      const user = getAuth().currentUser;
+      if (!user) return null;
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    }
+
+    // Example: place an order
+    async function placeOrder(orderPayload) {
+      const headers = await getAuthHeader();
+      if (!headers) throw new Error("Not signed in");
+
+      const response = await fetch("http://localhost:8080/api/v1/orders", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message ?? "Request failed");
+      }
+
+      return response.json();
+    }
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # Store your token in a shell variable for convenience
+    ID_TOKEN="YOUR_FIREBASE_ID_TOKEN"
+
+    # GET current user profile
+    curl -X GET http://localhost:8080/api/v1/users/me \
+      -H "Authorization: Bearer $ID_TOKEN"
+
+    # POST a new order
+    curl -X POST http://localhost:8080/api/v1/orders \
+      -H "Authorization: Bearer $ID_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"bakeryId":"bakery-abc","items":[{"productId":"prod-1","quantity":2}]}'
+
+    # GET bakeries (no auth required)
+    curl http://localhost:8080/api/v1/bakeries
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Browse every endpoint and see which role is required for each operation.
+  </Card>
+  <Card title="Roles & permissions" icon="shield" href="/concepts/roles-permissions">
+    Understand the CUSTOMER, BAKER, and ADMIN role system and how roles are assigned.
+  </Card>
+</CardGroup>

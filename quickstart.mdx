@@ -1,81 +1,238 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
-icon: 'rocket'
+title: "Quickstart: Run Panahashi Backend Locally"
+description: "Clone the Panahashi Backend, connect it to a Firebase project, start the Ktor server, and make your first authenticated API call in under 15 minutes."
+keywords: ["quickstart", "setup", "kotlin", "ktor", "firebase", "local development"]
 ---
 
-## Get started in three steps
+This guide takes you from a fresh clone to a running Panahashi Backend server with a verified API call. You will configure Firebase, start the Ktor server on port 8080, and authenticate your first request using a real Firebase ID token.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have the following installed and ready:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **JDK 17 or later** — the server targets JVM 17. Run `java -version` to check.
+- **Gradle 8 or later** — the project ships with the Gradle wrapper, so a global install is optional.
+- **A Firebase project** — you need owner or editor access to create a service account and enable services.
+- **Git** — to clone the repository.
 
-### Step 2: Deploy your changes
+## Setup steps
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Panahashi Backend source to your machine:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    git clone https://github.com/AndrewwCO/Panahashi-Backend.git
+    cd Panahashi-Backend
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    The project root contains `build.gradle.kts`, `gradlew`, and the `src/` directory with the Ktor application.
+  </Step>
 
-### Step 3: Go live
+  <Step title="Create and configure your Firebase project">
+    Panahashi Backend relies on four Firebase services. Enable all of them before running the server.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    1. Open the [Firebase Console](https://console.firebase.google.com) and create a new project (or use an existing one).
+    2. **Firestore** — go to **Build → Firestore Database** and create a database in production mode. Choose the region closest to your users.
+    3. **Authentication** — go to **Build → Authentication → Sign-in method** and enable at least one provider. Email/Password and Google are recommended for testing.
+    4. **Storage** — go to **Build → Storage** and set up the default bucket. The backend defaults to the bucket name `panahashi.appspot.com`; set `FIREBASE_STORAGE_BUCKET` if your bucket name differs.
+    5. **Cloud Messaging (FCM)** — FCM is enabled automatically for every Firebase project. No extra steps are needed.
 
-## Next steps
+    <Note>
+      The Firestore security rules you configure for client SDKs do not affect server-side Admin SDK calls. The Firebase Admin SDK bypasses client-facing rules and uses your service account's IAM permissions instead.
+    </Note>
+  </Step>
 
-Now that you have your docs running, explore these key features:
+  <Step title="Download and place your service account key">
+    The server authenticates to Firebase using a service account JSON key.
 
-<CardGroup cols={2}>
+    1. In the Firebase Console, go to **Project Settings → Service accounts**.
+    2. Click **Generate new private key** and confirm. A JSON file downloads to your machine.
+    3. Rename the file to `serviceAccountKey.json` and place it in the **project root** (the same directory as `build.gradle.kts`):
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+    ```
+    Panahashi-Backend/
+    ├── build.gradle.kts
+    ├── serviceAccountKey.json   ← place it here
+    ├── gradlew
+    └── src/
+    ```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+    <Warning>
+      Never commit `serviceAccountKey.json` to version control. It grants admin access to your entire Firebase project. Add it to `.gitignore` immediately:
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+      ```bash
+      echo "serviceAccountKey.json" >> .gitignore
+      ```
+    </Warning>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+    Alternatively, point the `GOOGLE_APPLICATION_CREDENTIALS` environment variable at the file path, or set `FIREBASE_SERVICE_ACCOUNT_PATH` to override the config default. The server falls back to Application Default Credentials when no file is found.
+  </Step>
 
+  <Step title="Set up Firestore collections">
+    The backend reads and writes to these Firestore collections. You can let the server create them on first write, or initialize them manually in the Firebase Console by adding a placeholder document to each.
+
+    | Collection   | Purpose                                         |
+    |--------------|-------------------------------------------------|
+    | `users`      | User profiles with roles and FCM tokens         |
+    | `bakeries`   | Bakery storefronts and metadata                 |
+    | `products`   | Products belonging to bakeries                  |
+    | `orders`     | Customer orders and their lifecycle status      |
+    | `reviews`    | Customer reviews scoped to bakeries             |
+    | `favorites`  | Per-user favorited bakeries                     |
+    | `carts`      | Active shopping carts                           |
+    | `promotions` | Discount promotions scoped to bakeries          |
+    | `loyalty`    | Stamp card records per user per bakery          |
+    | `payments`   | Payment records linked to orders                |
+
+    <Tip>
+      Create collections in the Firebase Console by adding a document with a placeholder field, then deleting the placeholder. This is useful if you want to configure indexes or composite query rules before the first server write.
+    </Tip>
+  </Step>
+
+  <Step title="Run the server">
+    Start the Ktor server using the Gradle wrapper. No configuration files need editing if you placed `serviceAccountKey.json` in the project root:
+
+    ```bash
+    ./gradlew run
+    ```
+
+    On the first run, Gradle downloads all dependencies — Ktor 3.1.3, Firebase Admin SDK 9.4.2, and others. Subsequent runs are faster.
+
+    When the server is ready, you will see output similar to:
+
+    ```
+    2026-05-19 10:00:00.000 [main] INFO  Application - Responding at http://0.0.0.0:8080
+    ```
+
+    The server binds to `0.0.0.0:8080` by default. Override the port with the `PORT` environment variable:
+
+    ```bash
+    PORT=9000 ./gradlew run
+    ```
+  </Step>
+
+  <Step title="Check the health endpoint">
+    Verify the server is running by calling the public health endpoint — no authentication required:
+
+    ```bash
+    curl http://localhost:8080/health
+    ```
+
+    Expected response:
+
+    ```json
+    {
+      "status": "ok",
+      "service": "panahashi-backend",
+      "version": "1.0.0"
+    }
+    ```
+
+    If you get a connection error, check that the Gradle build finished without errors and that no other process is using port 8080.
+  </Step>
+
+  <Step title="Get a Firebase ID token">
+    Protected API endpoints require a Firebase ID token in the `Authorization` header. Obtain one from a Firebase-connected client application.
+
+    The examples below show two approaches — the Firebase JavaScript SDK for web apps, and the Firebase Admin SDK for server-to-server testing:
+
+    <CodeGroup>
+
+    ```javascript Firebase JS SDK (web)
+    import { initializeApp } from "firebase/app";
+    import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+
+    const app = initializeApp({
+      apiKey: "YOUR_WEB_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+    });
+
+    const auth = getAuth(app);
+
+    // Sign in an existing user
+    const { user } = await signInWithEmailAndPassword(
+      auth,
+      "user@example.com",
+      "password123"
+    );
+
+    // Retrieve the ID token — expires after 1 hour
+    const idToken = await user.getIdToken();
+    console.log("ID token:", idToken);
+    ```
+
+    ```javascript Firebase Admin SDK (testing only)
+    import { initializeApp, cert } from "firebase-admin/app";
+    import { getAuth } from "firebase-admin/auth";
+    import serviceAccount from "./serviceAccountKey.json" assert { type: "json" };
+
+    initializeApp({ credential: cert(serviceAccount) });
+
+    // Mint a custom token for a test UID
+    const customToken = await getAuth().createCustomToken("test-uid");
+
+    // Exchange the custom token for an ID token via the REST API
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=YOUR_WEB_API_KEY`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+      }
+    );
+    const { idToken } = await res.json();
+    console.log("ID token:", idToken);
+    ```
+
+    </CodeGroup>
+
+    <Note>
+      Firebase ID tokens expire after **1 hour**. See the [Authentication guide](/authentication) for details on refreshing tokens automatically.
+    </Note>
+  </Step>
+
+  <Step title="Make your first authenticated API call">
+    With your ID token, call a protected endpoint. `GET /api/v1/users/me` returns the profile for the authenticated user:
+
+    ```bash
+    curl -X GET http://localhost:8080/api/v1/users/me \
+      -H "Authorization: Bearer YOUR_FIREBASE_ID_TOKEN" \
+      -H "Content-Type: application/json"
+    ```
+
+    A successful `200` response returns the user's profile:
+
+    ```json
+    {
+      "uid": "abc123xyz",
+      "displayName": "Jane Baker",
+      "email": "jane@example.com",
+      "phone": "+1234567890",
+      "role": "CUSTOMER",
+      "bakeryId": null,
+      "fcmToken": null,
+      "createdAt": "2026-05-19T10:00:00Z"
+    }
+    ```
+
+    If you receive a `401 Unauthorized` response, your token has likely expired or was formatted incorrectly. Confirm the `Authorization` header starts with `Bearer ` (including the trailing space) followed by the raw token string.
+  </Step>
+</Steps>
+
+## What's next
+
+Now that your server is running and you have made your first authenticated call, explore the rest of the documentation.
+
+<CardGroup cols={3}>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Understand token lifecycle, refresh strategies, and which endpoints require authentication.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Browse every endpoint grouped by resource — bakeries, orders, users, and more.
+  </Card>
+  <Card title="Roles & permissions" icon="shield" href="/concepts/roles-permissions">
+    Learn how the CUSTOMER, BAKER, and ADMIN roles control access across the API.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

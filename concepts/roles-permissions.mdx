@@ -1,0 +1,136 @@
+---
+title: 'Roles and Permissions in Panahashi'
+description: 'Panahashi uses three roles: CUSTOMER, BAKER, and ADMIN. Learn what each role can access, how roles are assigned, and how 403 errors are returned for unauthorized actions.'
+keywords: ['roles', 'permissions', 'CUSTOMER', 'BAKER', 'ADMIN', 'authorization', 'Firebase', 'Firestore']
+---
+
+Panahashi uses a three-tier role system stored in Firestore to control access to API endpoints. Every authenticated user has exactly one role — `CUSTOMER`, `BAKER`, or `ADMIN` — and role checks happen server-side on each request via the `RoleUtils` extension functions on `ApplicationCall`. Unauthenticated callers can still reach a small set of public endpoints, while role-gated routes return `403 Forbidden` for unauthorized access.
+
+## Roles overview
+
+<CardGroup cols={3}>
+  <Card title="CUSTOMER" icon="user">
+    The default role assigned at signup. Customers can browse bakeries, place orders, manage their cart, write reviews, and track loyalty rewards.
+  </Card>
+  <Card title="BAKER" icon="store">
+    Assigned by an admin when a bakery is created and linked to the user. Bakers manage their own bakery's products, update order statuses, verify QR codes, and view bakery statistics.
+  </Card>
+  <Card title="ADMIN" icon="shield">
+    Full platform access. Admins create and delete bakeries, manage all orders, process refunds, and promote or demote any user's role.
+  </Card>
+</CardGroup>
+
+## Role capabilities by resource
+
+The table below summarises what each role can do across the major resource types.
+
+| Resource | Public | CUSTOMER | BAKER | ADMIN |
+|---|---|---|---|---|
+| Bakeries | Browse, search, nearby | View by ID | — | Create, delete |
+| Products | Browse by bakery | View by ID | Create, update | — |
+| Orders | — | Place, view own | Update status, verify QR | View all |
+| Cart | — | View, add items | — | — |
+| Reviews | Browse | Submit | — | — |
+| Promotions | Browse | — | Create | — |
+| Payments | — | Pay for order | — | Refund |
+| Loyalty | — | View own card | — | — |
+| Users | — | View own profile | — | List all, change roles |
+| Stats | — | — | Bakery stats | Platform stats |
+| Uploads | — | — | Upload product images | — |
+
+## How roles are assigned
+
+All new users receive the `CUSTOMER` role by default when their profile document is first created in Firestore. Only an `ADMIN` can change a user's role.
+
+<Steps>
+  <Step title="User signs up">
+    Firebase Authentication creates a user account. The first authenticated API call creates a `UserProfile` document in the `users` Firestore collection with `role: CUSTOMER`.
+  </Step>
+  <Step title="Admin creates a bakery">
+    An `ADMIN` calls `POST /api/v1/bakeries`, which creates a `Bakery` document and sets the `ownerId` field to the intended baker's `uid`.
+  </Step>
+  <Step title="Admin promotes the baker">
+    The `ADMIN` calls `PATCH /api/v1/users/{uid}/role` to update the user's `role` to `BAKER` and set their `bakeryId` field to the newly created bakery's ID.
+  </Step>
+  <Step title="Baker gains access">
+    On subsequent requests, `RoleUtils.getBakeryId()` reads the caller's Firestore document, verifies their role is `BAKER` or `ADMIN`, and returns their `bakeryId` for use in route handlers.
+  </Step>
+</Steps>
+
+<Note>
+  Role changes take effect immediately on the next request. There is no cache to invalidate — the role is read from Firestore on every call that requires a role check.
+</Note>
+
+## Baker identity and bakery linking
+
+A `BAKER` user has a `bakeryId` field in their `UserProfile` document that links them to exactly one bakery. The `getBakeryId()` helper enforces this:
+
+```kotlin
+// RoleUtils.kt
+suspend fun ApplicationCall.getBakeryId(): String {
+    // Verifies caller is BAKER or ADMIN, then returns bakeryId from their Firestore user doc
+}
+```
+
+If a `BAKER` tries to modify a product or order that belongs to a different bakery, the route handler compares the request's `bakeryId` against the authenticated user's `bakeryId` and rejects mismatches.
+
+## How role enforcement works
+
+Role checks are handled by two extension functions in `RoleUtils.kt`:
+
+```kotlin
+// Returns 403 if caller is not ADMIN
+suspend fun ApplicationCall.requireAdmin()
+
+// Returns 403 if caller is neither BAKER nor ADMIN
+suspend fun ApplicationCall.requireBaker()
+```
+
+When a caller does not have the required role, the server responds immediately with `403 Forbidden` and an `ApiError` body — no route handler logic runs.
+
+```json
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "code": "UNAUTHORIZED",
+  "message": "Token inválido o expirado"
+}
+```
+
+<Warning>
+  A `403 Forbidden` response means the caller's token is valid but their role is insufficient. A `401 Unauthorized` response means the Firebase token itself is missing, invalid, or expired.
+</Warning>
+
+## Public endpoints (no authentication required)
+
+The following endpoints are accessible without a Firebase token:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Server health check |
+| `GET` | `/api/v1/bakeries` | List all bakeries |
+| `GET` | `/api/v1/bakeries/nearby` | Find nearby bakeries |
+| `GET` | `/api/v1/products` | List products by bakery (`?bakeryId=`) |
+| `GET` | `/api/v1/reviews` | List reviews |
+| `GET` | `/api/v1/promotions` | List active promotions |
+| `GET` | `/api/v1/search` | Search bakeries and products |
+
+## Role storage in Firestore
+
+Roles are stored directly on each user document in the `users` Firestore collection. The relevant fields are:
+
+```json
+{
+  "uid": "firebase-uid-abc123",
+  "displayName": "María López",
+  "email": "maria@example.com",
+  "role": "BAKER",
+  "bakeryId": "bakery-xyz789",
+  "createdAt": 1716000000000
+}
+```
+
+<Note>
+  The `bakeryId` field is only meaningful for users with the `BAKER` role. For `CUSTOMER` and `ADMIN` users it is an empty string.
+</Note>

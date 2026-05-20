@@ -1,0 +1,105 @@
+---
+title: "Upload API — Product and Bakery Images"
+description: "Upload product images and bakery logos or banners via multipart form data. Accepts JPEG, PNG, WebP up to 5 MB. Automatically saves the URL to the record."
+---
+
+The Upload API stores images to Firebase Storage and automatically updates the related product or bakery record with the new URL. All uploads use multipart form data with the field name `image`.
+
+## Accepted formats
+
+| Format | MIME type |
+|--------|-----------|
+| JPEG | `image/jpeg` |
+| PNG | `image/png` |
+| WebP | `image/webp` |
+
+**Maximum file size:** 5 MB
+
+<Warning>Uploading an unsupported MIME type or a file larger than 5 MB returns a 400 error.</Warning>
+
+## Response
+
+Upload endpoints return the updated record (Product or Bakery) with the new image URL already saved:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "prod456",
+    "name": "Croissant",
+    "imageUrl": "https://storage.googleapis.com/panahashi.appspot.com/products/bak001/abc123.jpg"
+  }
+}
+```
+
+<Note>The image URL is automatically saved to the product or bakery record. No additional PATCH call is needed.</Note>
+
+---
+
+## POST /api/v1/upload/product/{productId}
+
+Uploads an image for a product and saves the URL to the product's `imageUrl` field. The baker must own the product's bakery. If the product already has an image, the old one is deleted from Storage first.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="productId" type="string" required>ID of the product to attach the image to.</ParamField>
+<ParamField body="image" type="file" required>Image file (multipart/form-data, field name must be `image`).</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -F "image=@/path/to/croissant.jpg" \
+  http://localhost:8080/api/v1/upload/product/prod456
+```
+
+---
+
+## POST /api/v1/upload/bakery/logo
+
+Uploads a logo for the authenticated baker's bakery and saves the URL to `logoUrl`. If a logo already exists, the old one is deleted first.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="image" type="file" required>Logo image file (multipart/form-data, field name must be `image`).</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -F "image=@/path/to/logo.png" \
+  http://localhost:8080/api/v1/upload/bakery/logo
+```
+
+---
+
+## POST /api/v1/upload/bakery/banner
+
+Uploads a banner image for the authenticated baker's bakery and saves the URL to `bannerUrl`. If a banner already exists, the old one is deleted first.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="image" type="file" required>Banner image file (multipart/form-data, field name must be `image`).</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -F "image=@/path/to/banner.jpg" \
+  http://localhost:8080/api/v1/upload/bakery/banner
+```
+
+---
+
+## POST /api/v1/upload/bakery/{bakeryId}/logo
+
+Admin endpoint to upload a logo for any bakery.
+
+**Auth required:** Yes — **ADMIN**
+
+<ParamField path="bakeryId" type="string" required>ID of the bakery.</ParamField>
+<ParamField body="image" type="file" required>Logo image file (multipart/form-data, field name must be `image`).</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -F "image=@/path/to/logo.png" \
+  http://localhost:8080/api/v1/upload/bakery/bak001/logo
+```

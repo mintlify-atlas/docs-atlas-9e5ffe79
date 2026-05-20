@@ -1,0 +1,108 @@
+---
+title: "Cart API — Shopping Cart Management"
+description: "Manage a customer's shopping cart. Adding items from a different bakery automatically clears the existing cart, ensuring single-bakery orders."
+---
+
+The Cart API manages a per-user shopping cart stored in Firestore. Each cart is tied to a single bakery — adding an item from a different bakery automatically clears the existing cart first. The cart is automatically cleared when a successful order is placed.
+
+## Cart object
+
+<ResponseField name="userId" type="string">Firebase UID of the cart owner.</ResponseField>
+<ResponseField name="bakeryId" type="string">ID of the bakery this cart is for.</ResponseField>
+<ResponseField name="bakeryName" type="string">Name of the bakery.</ResponseField>
+<ResponseField name="items" type="CartItem[]">
+  List of items in the cart.
+  <Expandable title="CartItem fields">
+    <ResponseField name="productId" type="string">Product ID.</ResponseField>
+    <ResponseField name="name" type="string">Product name (snapshot at time of adding).</ResponseField>
+    <ResponseField name="price" type="number">Unit price (snapshot).</ResponseField>
+    <ResponseField name="emoji" type="string">Product emoji.</ResponseField>
+    <ResponseField name="qty" type="integer">Quantity.</ResponseField>
+  </Expandable>
+</ResponseField>
+<ResponseField name="updatedAt" type="integer">Last updated epoch ms.</ResponseField>
+
+---
+
+## GET /api/v1/cart
+
+Returns the authenticated customer's current cart.
+
+**Auth required:** Yes — **CUSTOMER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/cart
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "uid123",
+    "bakeryId": "bak001",
+    "bakeryName": "Panadería El Trigal",
+    "items": [
+      { "productId": "prod001", "name": "Croissant", "price": 3.5, "emoji": "🥐", "qty": 2 }
+    ]
+  }
+}
+```
+
+---
+
+## POST /api/v1/cart/items
+
+Adds an item to the cart or increments its quantity if already present.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField body="bakeryId" type="string" required>Bakery the product belongs to.</ParamField>
+<ParamField body="productId" type="string" required>Product ID to add.</ParamField>
+<ParamField body="qty" type="integer" required>Quantity to add.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"bakeryId":"bak001","productId":"prod001","qty":2}' \
+  http://localhost:8080/api/v1/cart/items
+```
+
+<Warning>If the `bakeryId` differs from the current cart's bakery, the cart is cleared before the new item is added.</Warning>
+
+---
+
+## PATCH /api/v1/cart/items
+
+Updates the quantity of an existing cart item. Set `qty` to `0` to remove the item.
+
+**Auth required:** Yes — **CUSTOMER**
+
+<ParamField body="productId" type="string" required>Product ID to update.</ParamField>
+<ParamField body="qty" type="integer" required>New quantity. Use `0` to remove the item from the cart.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"productId":"prod001","qty":3}' \
+  http://localhost:8080/api/v1/cart/items
+```
+
+---
+
+## DELETE /api/v1/cart
+
+Clears all items from the cart.
+
+**Auth required:** Yes — **CUSTOMER**
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/cart
+```
+
+<Tip>The cart is automatically cleared when you place an order via `POST /api/v1/orders`.</Tip>

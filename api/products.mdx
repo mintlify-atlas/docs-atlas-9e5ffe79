@@ -1,0 +1,170 @@
+---
+title: "Products API — Catalog and Stock Management"
+description: "REST endpoints for browsing, creating, and managing bakery products. Stock changes automatically update product availability when stock reaches zero."
+---
+
+The Products API exposes the bakery product catalog. Customers browse available products by bakery; bakers manage their full catalog including out-of-stock items.
+
+## Product object
+
+<ResponseField name="id" type="string">Unique product ID.</ResponseField>
+<ResponseField name="bakeryId" type="string">ID of the owning bakery.</ResponseField>
+<ResponseField name="name" type="string">Product name.</ResponseField>
+<ResponseField name="price" type="number">Price in local currency.</ResponseField>
+<ResponseField name="emoji" type="string">Display emoji for the product (e.g. "🥐").</ResponseField>
+<ResponseField name="availabilityStatus" type="string">One of: `READY_NOW`, `READY_IN_20`, `READY_IN_60`, `ADVANCE_ORDER_ONLY`, `OUT_OF_STOCK`.</ResponseField>
+<ResponseField name="stock" type="integer">Current stock count.</ResponseField>
+<ResponseField name="category" type="string">Category label (e.g. "Panes", "Pasteles").</ResponseField>
+<ResponseField name="description" type="string">Product description.</ResponseField>
+<ResponseField name="imageUrl" type="string">Firebase Storage image URL.</ResponseField>
+<ResponseField name="available" type="boolean">Whether the product is available for ordering. Automatically `false` when stock reaches 0.</ResponseField>
+<ResponseField name="advanceMinutes" type="integer">Minutes of advance notice required for ADVANCE_ORDER_ONLY items.</ResponseField>
+
+## Availability status values
+
+| Status | Meaning |
+|--------|---------|
+| `READY_NOW` | In stock and ready immediately |
+| `READY_IN_20` | Ready in approximately 20 minutes |
+| `READY_IN_60` | Ready in approximately 60 minutes |
+| `ADVANCE_ORDER_ONLY` | Must be ordered in advance |
+| `OUT_OF_STOCK` | Temporarily unavailable |
+
+---
+
+## GET /api/v1/products
+
+Returns all available products for a bakery (`available = true`).
+
+**Auth required:** No
+
+<ParamField query="bakeryId" type="string" required>ID of the bakery to fetch products for.</ParamField>
+
+```bash
+curl "http://localhost:8080/api/v1/products?bakeryId=abc123"
+```
+
+---
+
+## GET /api/v1/products/{id}
+
+Returns a single product by ID.
+
+**Auth required:** Yes (any role)
+
+<ParamField path="id" type="string" required>Product ID.</ParamField>
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/products/prod456
+```
+
+---
+
+## GET /api/v1/products/my
+
+Returns all products for the authenticated baker's bakery, including out-of-stock items.
+
+**Auth required:** Yes — **BAKER**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/products/my
+```
+
+---
+
+## GET /api/v1/products/admin/all
+
+Returns all products across every bakery on the platform.
+
+**Auth required:** Yes — **ADMIN**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/products/admin/all
+```
+
+---
+
+## POST /api/v1/products
+
+Creates a new product for the authenticated baker's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField body="name" type="string" required>Product name.</ParamField>
+<ParamField body="price" type="number" required>Price.</ParamField>
+<ParamField body="emoji" type="string" required>Display emoji.</ParamField>
+<ParamField body="availabilityStatus" type="string" required>One of the availability status values.</ParamField>
+<ParamField body="stock" type="integer" required>Initial stock count.</ParamField>
+<ParamField body="category" type="string" required>Category label.</ParamField>
+<ParamField body="description" type="string">Product description.</ParamField>
+<ParamField body="imageUrl" type="string">Image URL (use the Upload API to get this).</ParamField>
+<ParamField body="available" type="boolean">Whether immediately available. Overridden to `false` if stock is 0.</ParamField>
+<ParamField body="advanceMinutes" type="integer">Required advance minutes for ADVANCE_ORDER_ONLY.</ParamField>
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Croissant","price":3.5,"emoji":"🥐","availabilityStatus":"READY_NOW","stock":20,"category":"Pasteles"}' \
+  http://localhost:8080/api/v1/products
+```
+
+---
+
+## PATCH /api/v1/products/{id}
+
+Updates a product. Baker must own the product's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Product ID.</ParamField>
+
+All body fields are optional — only supplied fields are updated.
+
+---
+
+## PATCH /api/v1/products/{id}/stock
+
+Updates only the stock count. Setting stock to `0` automatically sets `available = false`.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Product ID.</ParamField>
+<ParamField body="stock" type="integer" required>New stock count.</ParamField>
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"stock":0}' \
+  http://localhost:8080/api/v1/products/prod456/stock
+```
+
+<Note>When stock reaches 0, `available` is automatically set to `false`. Set a positive stock value to re-enable availability.</Note>
+
+---
+
+## DELETE /api/v1/products/{id}
+
+Deletes a product. Baker must own the product's bakery.
+
+**Auth required:** Yes — **BAKER**
+
+<ParamField path="id" type="string" required>Product ID.</ParamField>
+
+---
+
+## POST /api/v1/products/seed
+
+Seeds 4 sample products for the authenticated baker's bakery. Useful for initial setup. Does nothing if the bakery already has products.
+
+**Auth required:** Yes — **BAKER**
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/products/seed
+```
